@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "skincare-advisor-frontend",
-    "slug": "skincare-advisor-frontend",
+    "name": "Skinsight",
+    "slug": "skinsight",
+    "scheme": "skinsight",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -25,6 +26,10 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-status-bar",
+      "expo-web-browser"
+    ]
   }
 }
