@@ -29,6 +29,10 @@ import { SafetyQuestionsScreen } from './onboarding/SafetyQuestionsScreen';
 import { SkinTypeScreen } from './onboarding/SkinTypeScreen';
 
 export function OnboardingHomeScreen() {
+  // `token` rather than `session`: the auth context now also accepts a locally
+  // minted development token, and every screen below only needs something to
+  // put in an Authorization header. Reaching into `session.access_token` here
+  // would tie these screens to one of the two ways of getting one.
   const { session, onboarding, refresh, signOut } = useAuth();
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
 
@@ -42,7 +46,7 @@ export function OnboardingHomeScreen() {
       .catch(() => setBlockedMessage(null));
   }, [onboarding?.scanAccessBlocked]);
 
-  if (!onboarding || !session) return null;
+   if (!onboarding || !session) return null;
   const token = session.access_token;
 
   // FR-ONB-003. Checked before the remaining steps: a restricted account has no
@@ -51,7 +55,7 @@ export function OnboardingHomeScreen() {
   // No age, no threshold, and no route back to the date of birth.
   if (onboarding.scanAccessBlocked) {
     return (
-      <FormScreen footer={<Button label="Sign out" tone="ghost" onPress={signOut} />}>
+      <FormScreen footer={<Button label="Sign out" tone="outline" onPress={signOut} />}>
         <Heading>Scan isn't available on this account</Heading>
         {blockedMessage ? (
           <View style={styles.notice}>
@@ -79,7 +83,7 @@ export function OnboardingHomeScreen() {
   }
 
   return (
-    <FormScreen footer={<Button label="Sign out" tone="ghost" onPress={signOut} />}>
+    <FormScreen footer={<Button label="Sign out" tone="outline" onPress={signOut} />}>
       <Heading>You're all set</Heading>
       <Body muted>
         Your profile is saved. Scanning arrives in the next build — you'll get one
@@ -91,12 +95,12 @@ export function OnboardingHomeScreen() {
 
 const styles = StyleSheet.create({
   notice: {
-    backgroundColor: color.surface,
+    backgroundColor: color.attentionSoft,
     borderLeftWidth: 3,
     borderLeftColor: color.attention,
     borderRadius: radius.field,
     padding: space.md,
     marginTop: space.lg,
   },
-  noticeText: { ...type.body, color: color.textOnDark },
+  noticeText: { ...type.body, color: color.text },
 });

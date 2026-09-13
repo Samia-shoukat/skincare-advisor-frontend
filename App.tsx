@@ -16,31 +16,49 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { Body, Button, FormScreen, Heading } from './components/ui';
+import { Body, Button, FormScreen, Heading, LinkButton } from './components/ui';
 import { AuthProvider, useAuth } from './lib/auth';
 import { color } from './lib/theme';
 import { AuthFormScreen, AuthMode } from './screens/AuthFormScreen';
+import { CaptureSpikeScreen } from './screens/CaptureSpikeScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
 import { OnboardingHomeScreen } from './screens/OnboardingHomeScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 
-type AuthRoute = { name: 'welcome' } | { name: 'form'; mode: AuthMode } | { name: 'forgot' };
+type Route =
+  | { name: 'welcome' }
+  | { name: 'form'; mode: AuthMode }
+  | { name: 'forgot' }
+  | { name: 'capture' };
 
 function Root() {
   const { loading, session, error, refresh, signOut } = useAuth();
-  const [route, setRoute] = useState<AuthRoute>({ name: 'welcome' });
+  const [route, setRoute] = useState<Route>({ name: 'welcome' });
+
+  // Checked before anything else, and outside the signed-in branch, because
+  // the capture gate has nothing to do with who you are — it measures the
+  // device. Requiring a sign-in first would mean re-running onboarding every
+  // time the measurement needs repeating on a different phone.
+  //
+  // __DEV__ is a compile-time constant, so this whole branch is stripped from
+  // a production build rather than merely being unreachable.
+  if (__DEV__ && route.name === 'capture') {
+    return <CaptureSpikeScreen onExit={() => setRoute({ name: 'welcome' })} />;
+  }
 
   if (loading) {
     return (
       <View style={styles.centre}>
-        <ActivityIndicator color={color.brand} />
+        <ActivityIndicator color={color.primary} />
       </View>
     );
   }
 
   if (!session) {
     if (route.name === 'forgot') {
-      return <ForgotPasswordScreen onBack={() => setRoute({ name: 'form', mode: 'login' })} />;
+      return (
+        <ForgotPasswordScreen onBack={() => setRoute({ name: 'form', mode: 'login' })} />
+      );
     }
     if (route.name === 'form') {
       return (
@@ -53,10 +71,20 @@ function Root() {
       );
     }
     return (
-      <WelcomeScreen
-        onRegister={() => setRoute({ name: 'form', mode: 'register' })}
-        onLogin={() => setRoute({ name: 'form', mode: 'login' })}
-      />
+      <View style={styles.fill}>
+        <WelcomeScreen
+          onRegister={() => setRoute({ name: 'form', mode: 'register' })}
+          onLogin={() => setRoute({ name: 'form', mode: 'login' })}
+        />
+        {__DEV__ ? (
+          <View style={styles.devBar}>
+            <LinkButton
+              label="Capture gate spike"
+              onPress={() => setRoute({ name: 'capture' })}
+            />
+          </View>
+        ) : null}
+      </View>
     );
   }
 
@@ -94,10 +122,19 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  fill: { flex: 1 },
   centre: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.base,
+    backgroundColor: color.ground,
+  },
+  devBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingBottom: 4,
   },
 });
