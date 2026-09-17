@@ -1,116 +1,88 @@
 /**
- * Getting pixels out of a camera, on two platforms that offer nothing in
- * common.
+ * Getting pixels out of a camera — native frame processor path.
  *
- * Native has no access to live preview frames in Expo Go — frame processors
- * need a development build. So the native path samples small still images
- * instead and decodes them in JavaScript.
- *
- * That is slower than a frame processor and it is also a real architecture,
- * not a stand-in. The question this app has to answer is whether a mid-range
- * Android phone can evaluate three times a second while the preview stays
- * smooth. Sampling stills is the cheapest way to get a number for that, and if
- * it turns out to be fast enough the frame processor may never be needed.
- *
- * Web uses a canvas, which gives real pixel data directly. Useful for
- * developing the gate; not representative of phone performance.
+ * First attempt used vision-camera-resize-plugin, which pins Android Gradle
+ * Plugin 7.2.1 in its own buildscript — incompatible with this project's
+ * modern AGP/Gradle setup and not worth fighting. Dropped the dependency
+ * entirely: frame.toArrayBuffer() gives the full-resolution frame directly,
+ * and computeMetrics already accepts a stride, so a full-res buffer sampled
+ * every 8th pixel costs about the same as a resized one would have.
  */
 
-import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
-import { decode as decodeJpeg } from 'jpeg-js';
+import { useMemo, useRef } from 'react';
+import type { Frame } from 'react-native-vision-camera';
+import { useFrameProcessor, runAtTargetFps } from 'react-native-vision-camera';
+import { Worklets } from 'react-native-worklets-core';
 
 import { computeMetrics, FrameMetrics } from './captureGate';
 
-export interface SampleResult {
+/**
+ * Pixel stride for metrics sampling. Frame is full resolution (e.g.
+ * 1280x720); this keeps the per-sample workload comparable to what the
+ * still-sampling path did on a 160px-wide image, without a native resize.
+ */
+const SAMPLE_STEP = 8;
+
+/** Bytes per pixel for pixelFormat: 'rgb' on the <Camera> component. */
+const RGB_CHANNELS = 4;
+
+export interface FrameSampleResult {
   metrics: FrameMetrics;
-  /** Wall-clock milliseconds for capture plus decode plus metrics. */
+  /** Milliseconds for the metrics pass, measured on the worklet thread. */
   elapsedMs: number;
 }
 
 /**
- * Sample one frame from a camera ref and measure it.
+ * Hook that wires a vision-camera frame processor to the capture gate.
  *
- * The image is taken small on purpose. FR-CAM-001 asks for three evaluations a
- * second, and a full-resolution JPEG cannot be decoded in JavaScript anywhere
- * near that often. A 160-pixel-wide frame carries more than enough information
- * for mean brightness and gradient energy — this is not the photograph, it is
- * the measurement of one.
- */
-export async function sampleFrame(cameraRef: any): Promise<SampleResult | null> {
-  if (!cameraRef?.current) return null;
-
-  const started = Date.now();
-
-  try {
-    const photo = await cameraRef.current.takePictureAsync({
-      quality: 0.3,
-      base64: true,
-      imageType: 'jpg',
-    });
-
-    if (!photo?.base64) return null;
-
-    // FR-CAM-004. takePictureAsync writes a file whether or not base64 was
-    // asked for. Deleting it immediately is the whole of the Zero-Save
-    // guarantee on this path, and it has to happen before anything can throw.
-    await discardCapturedFile(photo.uri);
-
-    const bytes = base64ToBytes(photo.base64);
-    const decoded = decodeJpeg(bytes, { useTArray: true });
-
-    const metrics = computeMetrics(
-      decoded.data as unknown as Uint8ClampedArray,
-      decoded.width,
-      decoded.height,
-      null, // face detection is not available on this path
-      2,
-    );
-
-    return { metrics, elapsedMs: Date.now() - started };
-    } catch (e) {
-    // A sample failing is not worth tearing down the preview for — the next one
-    // is 300ms away. But swallowing it silently is how a gate that never runs
-    // ends up looking like a gate that passes, so it goes to the console.
-    console.warn('[frameSource] sample failed:', e);
-    return null;
-  }
-}
-
-/**
- * Delete a captured file. FR-CAM-004.
+ * `onSample` is called on the JS thread, at most `perSecond` times a second —
+ * enforced natively by `runAtTargetFps`, which is the FR-CAM-001 limiter for
+ * this path.
  *
- * Failures are swallowed deliberately: on web there is no file, and on native
- * a missing file means it was never written. Neither is a reason to interrupt
- * the user. What matters is that the call is always made.
+ * react-native-worklets-core does not export a bare `runOnJS`; the bridge
+ * from worklet thread back to JS thread is `Worklets.createRunOnJS`, which
+ * must be created once (not per frame) and is safe to call from the worklet.
  */
-export async function discardCapturedFile(uri: string | undefined): Promise<void> {
-  if (!uri || Platform.OS === 'web') return;
-  try {
-    await FileSystem.deleteAsync(uri, { idempotent: true });
-  } catch {
-    // Nothing useful to do, and nothing about it worth logging — a log line
-    // naming a photo path is closer to the thing we are trying to avoid.
-  }
-}
+export function useCaptureFrameProcessor(
+  onSample: (result: FrameSampleResult) => void,
+  perSecond = 3,
+) {
+  const onSampleRef = useRef(onSample);
+  onSampleRef.current = onSample;
 
-/** Base64 to bytes without Buffer, which React Native does not ship. */
-function base64ToBytes(base64: string): Uint8Array {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  const clean = base64.replace(/[^A-Za-z0-9+/]/g, '');
-  const bytes = new Uint8Array((clean.length * 3) / 4);
+  const deliverOnJS = useMemo(
+    () =>
+      Worklets.createRunOnJS((metrics: FrameMetrics, elapsedMs: number) => {
+        onSampleRef.current({ metrics, elapsedMs });
+      }),
+    [],
+  );
 
-  let byteIndex = 0;
-  for (let i = 0; i < clean.length; i += 4) {
-    const a = chars.indexOf(clean[i]);
-    const b = chars.indexOf(clean[i + 1]);
-    const c = chars.indexOf(clean[i + 2]);
-    const d = chars.indexOf(clean[i + 3]);
+  const frameProcessor = useFrameProcessor(
+    (frame: Frame) => {
+      'worklet';
+      runAtTargetFps(perSecond, () => {
+        'worklet';
+        const started = performance.now();
 
-    bytes[byteIndex++] = (a << 2) | (b >> 4);
-    if (c !== -1) bytes[byteIndex++] = ((b & 15) << 4) | (c >> 2);
-    if (d !== -1) bytes[byteIndex++] = ((c & 3) << 6) | d;
-  }
+        const buffer = frame.toArrayBuffer();
+        const pixels = new Uint8Array(buffer);
 
-  return bytes.subarray(0, byteIndex);
+        const metrics = computeMetrics(
+          pixels as unknown as Uint8ClampedArray,
+          frame.width,
+          frame.height,
+          null, // face detection: separate plugin, not wired yet
+          SAMPLE_STEP,
+          RGB_CHANNELS,
+        );
+
+        const elapsedMs = performance.now() - started;
+        deliverOnJS(metrics, elapsedMs);
+      });
+    },
+    [deliverOnJS, perSecond],
+  );
+
+  return frameProcessor;
 }

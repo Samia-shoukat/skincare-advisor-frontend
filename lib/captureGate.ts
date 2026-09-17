@@ -84,7 +84,6 @@ export function evaluateFrame(
 
   if (metrics.meanLuma < thresholds.minLuma) return 'TOO_DARK';
   if (metrics.meanLuma > thresholds.maxLuma) return 'TOO_BRIGHT';
-
   // Checked after brightness because a dark frame has low variance by
   // definition, and "move to brighter light" is the useful instruction there.
   if (metrics.lumaVariance < thresholds.minLumaVariance) return 'NO_FACE';
@@ -105,6 +104,11 @@ export function evaluateFrame(
  *
  * `faceDetected` is not computed here — it comes from the platform's detector
  * and is passed in, so this function stays pure and testable.
+ *
+ * Marked as a worklet: this runs on the frame-processor thread inside
+ * `frameSource.ts`, and worklets-core can only call functions that are
+ * themselves compiled as worklets. Without this directive, the caller's
+ * compiled worklet ends up with corrupted/empty code at runtime.
  */
 export function computeMetrics(
   rgba: Uint8ClampedArray,
@@ -112,7 +116,10 @@ export function computeMetrics(
   height: number,
   faceDetected: boolean | null = null,
   step = 4,
+  channels = 4,
 ): FrameMetrics {
+  'worklet';
+
   let sum = 0;
   let sumSquares = 0;
   let count = 0;
@@ -121,7 +128,7 @@ export function computeMetrics(
 
   for (let y = 0; y < height; y += step) {
     for (let x = 0; x < width; x += step) {
-      const i = (y * width + x) * 4;
+      const i = (y * width + x) * channels;
 
       // Rec. 601 luma. Integer weights avoid float work in the inner loop,
       // which at this call rate is worth the slight loss of precision.
@@ -136,7 +143,7 @@ export function computeMetrics(
       // blurred", the difference between the two is not worth the frames.
       const right = x + step;
       if (right < width) {
-        const j = (y * width + right) * 4;
+        const j = (y * width + right) * channels;
         const rightLuma =
           (rgba[j] * 299 + rgba[j + 1] * 587 + rgba[j + 2] * 114) / 1000;
         gradientSum += Math.abs(luma - rightLuma);
@@ -166,6 +173,9 @@ export function computeMetrics(
  * than in the camera component means the cap cannot be lost when that
  * component is rewritten — and it will be, because the current one targets a
  * browser webcam and the shipped one will not.
+ *
+ * Not a worklet: this class is used on the JS thread, not inside the frame
+ * processor, so it stays a plain class.
  */
 export class EvaluationLimiter {
   private lastRun = 0;
