@@ -15,6 +15,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { CaptureScreen } from './screens/CaptureScreen';
 
 import { Body, Button, FormScreen, Heading, LinkButton } from './components/ui';
 import { AuthProvider, useAuth } from './lib/auth';
@@ -22,6 +23,8 @@ import { color } from './lib/theme';
 import { AuthFormScreen, AuthMode } from './screens/AuthFormScreen';
 import { CaptureSpikeScreen } from './screens/CaptureSpikeScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
+import { clearRoutine } from './lib/routineCache';
+import { OfflineRoutineFallback } from './screens/OfflineRoutineFallback';
 import { OnboardingHomeScreen } from './screens/OnboardingHomeScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 
@@ -29,7 +32,8 @@ type Route =
   | { name: 'welcome' }
   | { name: 'form'; mode: AuthMode }
   | { name: 'forgot' }
-  | { name: 'capture' };
+  | { name: 'capture' }
+  | { name: 'captureProd' };
 
 function Root() {
   const { loading, session, error, refresh, signOut } = useAuth();
@@ -45,6 +49,19 @@ function Root() {
   if (__DEV__ && route.name === 'capture') {
     return <CaptureSpikeScreen onExit={() => setRoute({ name: 'welcome' })} />;
   }
+  if (__DEV__ && route.name === 'captureProd') {
+  return (
+    <CaptureScreen
+      copy={{ retake: 'Retake', retakeGuidance: 'Retake guidance' }}
+      onReferralRequired={() => setRoute({ name: 'welcome' })}
+      onScanComplete={(result) => {
+        console.log('Scan complete:', result);
+        setRoute({ name: 'welcome' });
+      }}
+      onExit={() => setRoute({ name: 'welcome' })}
+    />
+  );
+}
 
   if (loading) {
     return (
@@ -77,13 +94,17 @@ function Root() {
           onLogin={() => setRoute({ name: 'form', mode: 'login' })}
         />
         {__DEV__ ? (
-          <View style={styles.devBar}>
-            <LinkButton
-              label="Capture gate spike"
-              onPress={() => setRoute({ name: 'capture' })}
-            />
-          </View>
-        ) : null}
+  <View style={styles.devBar}>
+    <LinkButton
+      label="Capture gate spike"
+      onPress={() => setRoute({ name: 'capture' })}
+    />
+    <LinkButton
+      label="Capture screen (prod)"
+      onPress={() => setRoute({ name: 'captureProd' })}
+    />
+  </View>
+) : null}
       </View>
     );
   }
@@ -92,18 +113,32 @@ function Root() {
   // is almost always EXPO_PUBLIC_API_URL, so say so rather than showing an
   // empty screen.
   if (error) {
-    return (
+    // DR-002: signing out removes this account's saved routine from the phone.
+    const signOutAndForget = async () => {
+      await clearRoutine(session.user.id);
+      signOut();
+    };
+    const errorScreen = (
       <FormScreen
         footer={
           <>
             <Button label="Try again" onPress={refresh} />
-            <Button label="Sign out" tone="outline" onPress={signOut} />
+            <Button label="Sign out" tone="outline" onPress={signOutAndForget} />
           </>
         }
       >
         <Heading>Can't reach your profile</Heading>
         <Body muted>{error}</Body>
       </FormScreen>
+    );
+    // SRS 2.4: a saved routine is still viewable when the backend is not.
+    return (
+      <OfflineRoutineFallback
+        userId={session.user.id}
+        onRetry={refresh}
+        onSignOut={signOutAndForget}
+        fallback={errorScreen}
+      />
     );
   }
 

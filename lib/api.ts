@@ -112,6 +112,115 @@ export interface StringsBundle {
   quotaExhausted: string;
   /** FR-ONB-003. Shown when scanAccessBlocked is true. Names no age. */
   scanBlockedSupport: string;
+  scan: {
+    readyHeading: string;
+    readyBody: string;
+    start: string;
+    retake: string;
+    retakeGuidance: string;
+  };
+  routineScreen: {
+    heading: string;
+    morning: string;
+    evening: string;
+    budget: string;
+    premium: string;
+    for: string;
+    omitted: string;
+    startSlowly: string;
+    offline: string;
+    concernLabels: Record<string, string>;
+    frequencyLabels: Record<string, string>;
+  };
+  referralScreen: {
+    heading: string;
+    observedIntro: string;
+    summaryHeading: string;
+    share: string;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Scan
+// ---------------------------------------------------------------------------
+
+export type ScanIneligibilityReason =
+  | 'ONBOARDING_INCOMPLETE'
+  | 'SCAN_ACCESS_BLOCKED'
+  | 'REFERRAL_REQUIRED'
+  | 'QUOTA_EXHAUSTED';
+
+/** A display convenience only. The server re-checks on every scan (FR-SUB-002). */
+export interface Eligibility {
+  canScan: boolean;
+  reason: ScanIneligibilityReason | null;
+  scansRemaining: number;
+}
+
+/**
+ * One finding on the referral screen (FR-TRI-003).
+ *
+ * No identifier: the server never sends one, so there is nothing here that a
+ * screen could render by mistake. `associations` is absent -- not empty -- unless
+ * FR-AI-007 permits it, and in release 1.0 it never does.
+ */
+export interface ReferralSignal {
+  observation: string;
+  associations?: string[];
+}
+
+export interface Referral {
+  /** DECLARED: raised by the safety answers, no photo. OBSERVED: raised by the photo. */
+  kind: 'DECLARED' | 'OBSERVED';
+  signals: ReferralSignal[];
+  /** FR-TRI-005. Finished text, built server-side. Copy as-is. */
+  summary: string;
+}
+
+export type ScanOutcome = 'ROUTINE' | 'REFERRAL' | 'UNUSABLE' | 'ERROR';
+
+// ---------------------------------------------------------------------------
+// Routine -- FR-REC-001, FR-REC-005
+// ---------------------------------------------------------------------------
+
+export interface ProductOption {
+  id: string;
+  brand: string;
+  name: string;
+}
+
+export interface RoutineStep {
+  step: 'CLEANSE' | 'TREAT' | 'MOISTURISE' | 'PROTECT';
+  ingredient: string;
+  label: string;
+  maxPercent: number | null;
+  frequency: 'DAILY' | 'ALTERNATE_DAYS' | 'TWICE_WEEKLY';
+  ruleId: string;
+  concerns: string[];
+  /** FR-REC-005. A tier is null when no safe product exists; `generic` always does. */
+  products: {
+    budget: ProductOption | null;
+    premium: ProductOption | null;
+    generic: string;
+  };
+}
+
+export interface Routine {
+  routineId: string;
+  matrixVersion: string;
+  createdAt: string | null;
+  am: RoutineStep[];
+  pm: RoutineStep[];
+  omitted: { concern: string; reason: string }[];
+}
+
+export interface ScanResponse {
+  scanId: string;
+  outcome: ScanOutcome;
+  referral?: Referral;
+  concerns?: { concernId: string; severity: string }[];
+  routine?: Routine | null;
+  scansRemaining: number;
 }
 
 export interface QuestionnaireOption {
@@ -186,4 +295,15 @@ export const api = {
   getStrings: () => request<StringsBundle>('/v1/content/strings'),
 
   getQuestionnaire: () => request<Questionnaire>('/v1/content/questionnaire'),
+
+  /** Whether to offer the capture control at all. */
+  getScanEligibility: (token: string) =>
+    request<Eligibility>('/v1/scans/eligibility', { token }),
+
+  /** FR-SUB-005, UC-007. Available whatever the scan allowance says. 404 NO_ROUTINE if none yet. */
+  getLatestRoutine: (token: string) => request<Routine>('/v1/routines/latest', { token }),
+
+  /** FR-TRI-001, UC-003. The referral for a user flagged by their own answers -- no photo. */
+  getDeclaredReferral: (token: string) =>
+    request<Referral>('/v1/scans/referral', { token }),
 };

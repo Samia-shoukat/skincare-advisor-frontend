@@ -128,7 +128,7 @@ export function CaptureSpikeScreen({ onExit }: { onExit: () => void }) {
         device={device}
         isActive={running}
         frameProcessor={running ? frameProcessor : undefined}
-        pixelFormat="rgb"
+        pixelFormat="yuv"
       />
 
       <View style={[styles.prompt, metrics !== null && !issue && styles.promptOk]}>

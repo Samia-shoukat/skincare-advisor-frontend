@@ -19,7 +19,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Body, Button, FormScreen, Heading } from '../components/ui';
+import { Button, FormScreen, Heading } from '../components/ui';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { color, radius, space, type } from '../lib/theme';
@@ -27,6 +27,7 @@ import { ConsentScreen } from './onboarding/ConsentScreen';
 import { DateOfBirthScreen } from './onboarding/DateOfBirthScreen';
 import { SafetyQuestionsScreen } from './onboarding/SafetyQuestionsScreen';
 import { SkinTypeScreen } from './onboarding/SkinTypeScreen';
+import { ScanHomeScreen } from './ScanHomeScreen';
 
 export function OnboardingHomeScreen() {
   // `token` rather than `session`: the auth context now also accepts a locally
@@ -82,15 +83,7 @@ export function OnboardingHomeScreen() {
     return <ConsentScreen token={token} onDone={refresh} />;
   }
 
-  return (
-    <FormScreen footer={<Button label="Sign out" tone="outline" onPress={signOut} />}>
-      <Heading>You're all set</Heading>
-      <Body muted>
-        Your profile is saved. Scanning arrives in the next build — you'll get one
-        scan to start with.
-      </Body>
-    </FormScreen>
-  );
+  return <ScanHomeScreen token={token} userId={session.user.id} onSignOut={signOut} />;
 }
 
 const styles = StyleSheet.create({

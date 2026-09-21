@@ -3,17 +3,20 @@
  *
  * Split into two halves on purpose:
  *
- *   `computeMetrics` turns raw pixels into four numbers.
- *   `evaluateFrame`  turns four numbers into a decision.
+ *   computeMetrics* turns raw pixels into four numbers.
+ *   evaluateFrame   turns four numbers into a decision.
  *
- * Neither half touches a camera. That means the decision logic — which is the
- * part with requirements attached — can be tested exhaustively on a laptop
- * with synthetic pixel data, while only the plumbing needs a device.
+ * Neither half touches a camera. That means the decision logic — the part with
+ * requirements attached — is testable on a laptop with synthetic pixel data,
+ * while only the plumbing needs a device.
+ *
+ * The split earned itself: the frame source was rewritten twice (still capture
+ * → RGB frame processor → YUV frame processor) and nothing below changed.
  *
  * FR-CAM-001 caps evaluation at three per second. The cap is not a performance
- * budget, it is the point: a gate that runs on every frame would compete with
- * the preview, and FR-CAM-002 requires the preview to stay above 24fps. Three
- * per second is faster than a person can react to feedback anyway.
+ * budget, it is the point: a gate running on every frame would compete with the
+ * preview, and FR-CAM-002 requires the preview to stay above 24fps. Three per
+ * second is faster than a person can react to feedback anyway.
  */
 
 /** What a single sampled frame tells us. */
@@ -34,17 +37,17 @@ export interface FrameMetrics {
 
 export type CaptureIssue = 'NO_FACE' | 'TOO_DARK' | 'TOO_BRIGHT' | 'BLURRY';
 
+
 /**
  * Thresholds.
  *
  * **These are placeholders.** The specification's non-functional section, which
  * would have given real figures, was never written — so these are reasoned
  * starting points, not validated numbers. They need calibrating against real
- * photographs on real phones before release, and the values will differ by
- * camera.
+ * photographs on real phones before release, and will differ by camera.
  *
- * Kept in one object rather than scattered through the function so that
- * calibration is an edit to a table, and so the tests can override them.
+ * Kept in one object rather than scattered through the function so calibration
+ * is an edit to a table, and so tests can override them.
  */
 export const DEFAULT_THRESHOLDS = {
   /** Below this a phone camera is guessing at colour, and so is the model. */
@@ -60,16 +63,25 @@ export const DEFAULT_THRESHOLDS = {
   minSharpness: 12,
 } as const;
 
-export type Thresholds = typeof DEFAULT_THRESHOLDS;
+/**
+ * `as const` above pins each value to its literal type — `minSharpness` is
+ * typed `12`, not `number` — which is useful for catching typos in the
+ * defaults and useless for anything that needs different figures. The
+ * post-capture gate measures a downscaled thumbnail and genuinely needs its
+ * own sharpness number, so the shape is kept and the literals are widened.
+ */
+export type Thresholds = {
+  -readonly [K in keyof typeof DEFAULT_THRESHOLDS]: number;
+};
 
 /**
  * Decide whether a frame is usable.
  *
  * Returns the single most actionable problem, not all of them. A dark, blurry,
- * faceless frame gets one instruction; three at once is noise, and the user
+ * faceless frame gets one instruction; three at once is noise, and a person
  * cannot act on three things simultaneously anyway.
  *
- * The order is by what the user must fix first. Framing before lighting before
+ * The order is by what must be fixed first. Framing before lighting before
  * focus: there is no point telling someone to hold still while the camera is
  * pointed at the ceiling.
  */
@@ -84,6 +96,7 @@ export function evaluateFrame(
 
   if (metrics.meanLuma < thresholds.minLuma) return 'TOO_DARK';
   if (metrics.meanLuma > thresholds.maxLuma) return 'TOO_BRIGHT';
+
   // Checked after brightness because a dark frame has low variance by
   // definition, and "move to brighter light" is the useful instruction there.
   if (metrics.lumaVariance < thresholds.minLumaVariance) return 'NO_FACE';
@@ -94,21 +107,77 @@ export function evaluateFrame(
 }
 
 /**
- * Turn RGBA pixel data into metrics.
+ * Metrics from a YUV luma plane. The native path.
  *
- * Samples rather than reads every pixel. A 720×1280 preview is nearly a
- * million pixels; at three evaluations per second that is three million
- * operations per second competing with the preview for the same thread. Every
- * fourth pixel gives the same answer to two significant figures and costs a
- * sixteenth of the work.
+ * A YUV frame stores brightness in its first plane, one byte per pixel, with
+ * colour following separately. Everything the gate needs is in that plane — so
+ * this reads it and ignores the rest.
  *
- * `faceDetected` is not computed here — it comes from the platform's detector
- * and is passed in, so this function stays pure and testable.
+ * Cheaper than the RGBA version twice over: a quarter of the bytes, and no
+ * colour-to-luma arithmetic per pixel.
+ */
+export function computeMetricsFromLuma(
+  luma: Uint8Array,
+  width: number,
+  height: number,
+  faceDetected: boolean | null = null,
+  step = 8,
+): FrameMetrics {
+  let sum = 0;
+  let sumSquares = 0;
+  let count = 0;
+  let gradientSum = 0;
+  let gradientCount = 0;
+
+  // The plane is often padded to a stride wider than the image. Reading only
+  // `width` bytes per row would drift diagonally across the frame on such
+  // devices, so the stride is derived from the buffer rather than assumed.
+  const stride = Math.floor(luma.length / height) || width;
+
+  for (let y = 0; y < height; y += step) {
+    const rowStart = y * stride;
+    for (let x = 0; x < width; x += step) {
+      const value = luma[rowStart + x];
+      if (value === undefined) continue;
+
+      sum += value;
+      sumSquares += value * value;
+      count++;
+
+      // Horizontal difference against the next sampled pixel. A full Laplacian
+      // would be more accurate and several times the cost; for "is this
+      // blurred", the difference is not worth the frames.
+      const right = x + step;
+      if (right < width) {
+        const rightValue = luma[rowStart + right];
+        if (rightValue !== undefined) {
+          gradientSum += Math.abs(value - rightValue);
+          gradientCount++;
+        }
+      }
+    }
+  }
+
+  if (count === 0) {
+    return { meanLuma: 0, lumaVariance: 0, sharpness: 0, faceDetected };
+  }
+
+  const meanLuma = sum / count;
+
+  return {
+    meanLuma,
+    lumaVariance: Math.max(0, sumSquares / count - meanLuma * meanLuma),
+    sharpness: gradientCount > 0 ? gradientSum / gradientCount : 0,
+    faceDetected,
+  };
+}
+
+/**
+ * Metrics from RGBA pixel data. The web canvas path.
  *
- * Marked as a worklet: this runs on the frame-processor thread inside
- * `frameSource.ts`, and worklets-core can only call functions that are
- * themselves compiled as worklets. Without this directive, the caller's
- * compiled worklet ends up with corrupted/empty code at runtime.
+ * Kept because a browser has no YUV — a canvas gives RGBA and nothing else.
+ * Useful for developing the gate on a laptop; not representative of phone
+ * performance.
  */
 export function computeMetrics(
   rgba: Uint8ClampedArray,
@@ -116,10 +185,7 @@ export function computeMetrics(
   height: number,
   faceDetected: boolean | null = null,
   step = 4,
-  channels = 4,
 ): FrameMetrics {
-  'worklet';
-
   let sum = 0;
   let sumSquares = 0;
   let count = 0;
@@ -128,22 +194,18 @@ export function computeMetrics(
 
   for (let y = 0; y < height; y += step) {
     for (let x = 0; x < width; x += step) {
-      const i = (y * width + x) * channels;
+      const i = (y * width + x) * 4;
 
-      // Rec. 601 luma. Integer weights avoid float work in the inner loop,
-      // which at this call rate is worth the slight loss of precision.
+      // Rec. 601 luma. Integer weights avoid float work in the inner loop.
       const luma = (rgba[i] * 299 + rgba[i + 1] * 587 + rgba[i + 2] * 114) / 1000;
 
       sum += luma;
       sumSquares += luma * luma;
       count++;
 
-      // Horizontal difference against the next sampled pixel. A full Laplacian
-      // would be more accurate and several times the cost; for "is this
-      // blurred", the difference between the two is not worth the frames.
       const right = x + step;
       if (right < width) {
-        const j = (y * width + right) * channels;
+        const j = (y * width + right) * 4;
         const rightLuma =
           (rgba[j] * 299 + rgba[j + 1] * 587 + rgba[j + 2] * 114) / 1000;
         gradientSum += Math.abs(luma - rightLuma);
@@ -169,13 +231,9 @@ export function computeMetrics(
 /**
  * Rate limiter for the gate.
  *
- * FR-CAM-001 caps evaluation at three per second. Enforcing it here rather
- * than in the camera component means the cap cannot be lost when that
- * component is rewritten — and it will be, because the current one targets a
- * browser webcam and the shipped one will not.
- *
- * Not a worklet: this class is used on the JS thread, not inside the frame
- * processor, so it stays a plain class.
+ * Used by the web path. The native path uses vision-camera's `runAtTargetFps`,
+ * which enforces the same cap in native code before a worklet is even
+ * scheduled — cheaper, and it cannot be bypassed from JavaScript.
  */
 export class EvaluationLimiter {
   private lastRun = 0;
