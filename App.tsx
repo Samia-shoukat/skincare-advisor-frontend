@@ -24,6 +24,7 @@ import { AuthFormScreen, AuthMode } from './screens/AuthFormScreen';
 import { CaptureSpikeScreen } from './screens/CaptureSpikeScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
 import { clearRoutine } from './lib/routineCache';
+import { useBackHandler } from './lib/useBackHandler';
 import { OfflineRoutineFallback } from './screens/OfflineRoutineFallback';
 import { OnboardingHomeScreen } from './screens/OnboardingHomeScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
@@ -38,6 +39,23 @@ type Route =
 function Root() {
   const { loading, session, error, refresh, signOut } = useAuth();
   const [route, setRoute] = useState<Route>({ name: 'welcome' });
+
+  // Android back for the signed-out screens. Welcome is the root, so back
+  // leaves the app there; everything else steps back one screen. Signed-in
+  // screens handle their own.
+  useBackHandler(
+    !session && route.name !== 'welcome'
+      ? () => {
+          setRoute(route.name === 'forgot' ? { name: 'form', mode: 'login' } : { name: 'welcome' });
+          return true;
+        }
+      : __DEV__ && (route.name === 'capture' || route.name === 'captureProd')
+        ? () => {
+            setRoute({ name: 'welcome' });
+            return true;
+          }
+        : null,
+  );
 
   // Checked before anything else, and outside the signed-in branch, because
   // the capture gate has nothing to do with who you are — it measures the
@@ -164,12 +182,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: color.ground,
   },
+  // Development-only links. Top-left, below the status bar, so they never
+  // cover the privacy and terms links at the bottom of the Welcome screen.
   devBar: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    paddingBottom: 4,
+    top: 40,
+    left: 12,
+    alignItems: 'flex-start',
+    gap: 4,
   },
 });

@@ -25,11 +25,16 @@ import { Camera, useCameraDevice, useCameraPermission } from 'react-native-visio
 import { Button } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { CaptureIssue, evaluateFrame, FrameMetrics } from '../lib/captureGate';
-import { useCaptureFrameProcessor, FrameSampleResult } from '../lib/frameSource';
+import {
+  FRAME_PROCESSORS_ENABLED,
+  useCaptureFrameProcessor,
+  FrameSampleResult,
+} from '../lib/frameSource';
 import { evaluateCapturedImage } from '../lib/postCaptureGate';
 import { prepareImageForUpload, releaseImage } from '../lib/prepareImage';
 import type { ScanResponse } from '../lib/api';
 import { newIdempotencyKey, uploadImageAndRelease, UploadError } from '../lib/uploadImage';
+import { useBackHandler } from '../lib/useBackHandler';
 import { color, radius, space, type } from '../lib/theme';
 
 const PROMPT: Record<CaptureIssue, string> = {
@@ -109,6 +114,17 @@ export function CaptureScreen({ onScanComplete, onReferralRequired, onExit, copy
     setState('gating');
     setErrorMessage(null);
   };
+
+  // Android back: cancel the step in progress, or leave the camera. Declared
+  // before any early return, because hooks must run on every render.
+  useBackHandler(() => {
+    if (state === 'checking' || state === 'preparing' || state === 'uploading' || state === 'error') {
+      resetToGating();
+    } else {
+      onExit();
+    }
+    return true;
+  });
 
   const handleCapture = async () => {
     if (!cameraRef.current) return;
@@ -265,7 +281,11 @@ export function CaptureScreen({ onScanComplete, onReferralRequired, onExit, copy
         // replaced it. Smaller photos matter here because the gate has to read
         // one back before the user sees anything.
         photoQualityBalance="speed"
-        frameProcessor={state === 'gating' ? frameProcessor : undefined}
+        // Omitted entirely when this build has no frame-processor support:
+        // passing one would throw. The post-capture gate still runs.
+        frameProcessor={
+          FRAME_PROCESSORS_ENABLED && state === 'gating' ? frameProcessor : undefined
+        }
         pixelFormat="yuv"
       />
 

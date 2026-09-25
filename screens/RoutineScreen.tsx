@@ -33,10 +33,12 @@ interface Props {
   /** Shown when the routine came from the offline cache. */
   offline?: boolean;
   onDone?: () => void;
+  /** Account & privacy. Absent offline, where deletion can't work anyway. */
+  onAccount?: () => void;
   onSignOut?: () => void;
 }
 
-export function RoutineScreen({ routine, copy, offline, onDone, onSignOut }: Props) {
+export function RoutineScreen({ routine, copy, offline, onDone, onAccount, onSignOut }: Props) {
   const c = copy.routineScreen;
 
   return (
@@ -45,7 +47,10 @@ export function RoutineScreen({ routine, copy, offline, onDone, onSignOut }: Pro
         <>
           {/* FR-REC-007: outside the scroll view, so always visible. */}
           <Text style={styles.disclaimer}>{copy.routineDisclaimer}</Text>
-          {onDone ? <Button label="Done" tone="outline" onPress={onDone} /> : null}
+          {onDone ? <Button label="Try again" tone="outline" onPress={onDone} /> : null}
+          {onAccount ? (
+            <Button label={copy.account.heading} tone="outline" onPress={onAccount} />
+          ) : null}
           {onSignOut ? <Button label="Sign out" tone="outline" onPress={onSignOut} /> : null}
         </>
       }

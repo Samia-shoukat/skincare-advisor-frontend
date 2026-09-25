@@ -20,7 +20,8 @@ import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { Button, GradientScreen } from '../components/ui';
+import { Button, GradientScreen, LinkButton } from '../components/ui';
+import { openLegalPage } from '../lib/legal';
 import { authErrorMessage, signInWithGoogle } from '../lib/supabase';
 import { color, radius, shadow, space, type } from '../lib/theme';
 
@@ -87,6 +88,11 @@ export function WelcomeScreen({
       <Text style={styles.legal}>
         Cosmetic guidance only. Skinsight can't diagnose skin conditions.
       </Text>
+      {/* Readable before an account exists, whichever sign-in is chosen. */}
+      <View style={styles.legalLinks}>
+        <LinkButton label="Privacy policy" onPress={() => openLegalPage('/legal/privacy')} />
+        <LinkButton label="Terms of use" onPress={() => openLegalPage('/legal/terms')} />
+      </View>
 
       <Modal
         visible={sheetOpen}
@@ -115,6 +121,7 @@ export function WelcomeScreen({
 }
 
 const styles = StyleSheet.create({
+  legalLinks: { flexDirection: 'row', justifyContent: 'center', gap: space.lg, paddingBottom: space.md },
   body: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   mark: {

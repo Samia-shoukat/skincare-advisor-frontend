@@ -28,9 +28,10 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button } from '../../components/ui';
+import { Button, LinkButton } from '../../components/ui';
 import { StepDots } from '../../components/StepDots';
-import { ApiError, api } from '../../lib/api';
+import { ApiError, api, StringsBundle } from '../../lib/api';
+import { openLegalPage } from '../../lib/legal';
 import { color, radius, space, type } from '../../lib/theme';
 
 export function ConsentScreen({
@@ -42,6 +43,7 @@ export function ConsentScreen({
 }) {
   const [statement, setStatement] = useState<string | null>(null);
   const [version, setVersion] = useState<string | null>(null);
+  const [legal, setLegal] = useState<StringsBundle['legal'] | null>(null);
   const [readToEnd, setReadToEnd] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,8 @@ export function ConsentScreen({
       .getStrings()
       .then((bundle) => {
         setStatement(bundle.limitationsStatement);
-        setVersion(bundle.version);
+        setVersion(bundle.consentVersion);
+        setLegal(bundle.legal);
       })
       .catch(() => setError('Could not load the terms. Check your connection.'));
   }, []);
@@ -84,7 +87,7 @@ export function ConsentScreen({
         const bundle = await api.getStrings().catch(() => null);
         if (bundle) {
           setStatement(bundle.limitationsStatement);
-          setVersion(bundle.version);
+          setVersion(bundle.consentVersion);
           setReadToEnd(false);
         }
       }
@@ -132,6 +135,12 @@ export function ConsentScreen({
           {!readToEnd && statement ? (
             <Text style={styles.footnote}>Scroll to the end to continue.</Text>
           ) : null}
+          {legal ? (
+            <View style={styles.links}>
+              <LinkButton label="Privacy policy" onPress={() => openLegalPage(legal.privacyPath)} />
+              <LinkButton label="Terms of use" onPress={() => openLegalPage(legal.termsPath)} />
+            </View>
+          ) : null}
         </View>
       </SafeAreaView>
     </LinearGradient>
@@ -157,5 +166,6 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   footnote: { ...type.small, color: color.textFaint, textAlign: 'center' },
+  links: { flexDirection: 'row', justifyContent: 'center', gap: space.lg },
   error: { ...type.small, color: color.danger, textAlign: 'center' },
 });

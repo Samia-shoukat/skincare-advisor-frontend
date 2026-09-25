@@ -32,6 +32,8 @@ import {
 } from '../lib/api';
 import { clearRoutine, loadRoutine, saveRoutine } from '../lib/routineCache';
 import { color } from '../lib/theme';
+import { useBackHandler } from '../lib/useBackHandler';
+import { AccountScreen } from './AccountScreen';
 import { CaptureScreen } from './CaptureScreen';
 import { ReferralScreen } from './ReferralScreen';
 import { RoutineScreen } from './RoutineScreen';
@@ -40,7 +42,8 @@ type Screen =
   | { name: 'home' }
   | { name: 'capture' }
   | { name: 'referral'; referral: Referral }
-  | { name: 'routine'; routine: Routine; offline?: boolean };
+  | { name: 'routine'; routine: Routine; offline?: boolean }
+  | { name: 'account'; returnTo: Screen };
 
 interface Props {
   token: string;
@@ -53,6 +56,19 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
   const [eligibility, setEligibility] = useState<Eligibility | null>(null);
   const [screen, setScreen] = useState<Screen>({ name: 'home' });
   const [error, setError] = useState<string | null>(null);
+
+  // Android back. Top-level screens (home, routine, a declared referral)
+  // return false so back leaves the app as users expect; everything else steps
+  // back one screen. Capture and Account handle their own.
+  useBackHandler(
+    screen.name === 'referral' && screen.referral.kind === 'OBSERVED'
+      ? () => {
+          load();
+          return true;
+        }
+      : null,
+  );
+  const openAccount = () => setScreen({ name: 'account', returnTo: screen });
 
   const signOut = useCallback(async () => {
     // DR-002: nothing of this account stays on the phone after it leaves.
@@ -138,6 +154,18 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
     );
   }
 
+  if (screen.name === 'account' && copy) {
+    return (
+      <AccountScreen
+        token={token}
+        userId={userId}
+        copy={copy}
+        onBack={() => setScreen(screen.returnTo)}
+        onSignOut={onSignOut}
+      />
+    );
+  }
+
   if (screen.name === 'routine' && copy) {
     return (
       <RoutineScreen
@@ -145,7 +173,8 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
         copy={copy}
         offline={screen.offline}
         onDone={screen.offline ? load : undefined}
-        onSignOut={signOut}
+        onAccount={screen.offline ? undefined : openAccount}
+        onSignOut={screen.offline ? signOut : undefined}
       />
     );
   }
@@ -162,7 +191,7 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
     // For a declared referral, "Done" re-checks eligibility, which leads back
     // here while the flag is set. That is intended: there is nothing else this
     // account can do until its safety answers change.
-    return <ReferralScreen referral={screen.referral} onDone={load} />;
+    return <ReferralScreen referral={screen.referral} onDone={load} onAccount={openAccount} />;
   }
 
   if (screen.name === 'capture') {
@@ -186,7 +215,7 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
 
   if (!eligibility.canScan) {
     return (
-      <FormScreen footer={<Button label="Sign out" tone="outline" onPress={signOut} />}>
+      <FormScreen footer={<Button label={copy.account.heading} tone="outline" onPress={openAccount} />}>
         <Heading>{copy.scan.readyHeading}</Heading>
         <Body muted>
           {eligibility.reason === 'QUOTA_EXHAUSTED' ? copy.quotaExhausted : copy.scanBlockedSupport}
@@ -200,7 +229,7 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
       footer={
         <>
           <Button label={copy.scan.start} onPress={() => setScreen({ name: 'capture' })} />
-          <Button label="Sign out" tone="outline" onPress={signOut} />
+          <Button label={copy.account.heading} tone="outline" onPress={openAccount} />
         </>
       }
     >

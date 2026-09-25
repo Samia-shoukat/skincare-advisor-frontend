@@ -102,7 +102,21 @@ export interface SafetyQuestion {
 }
 
 export interface StringsBundle {
+  /** Version of the whole bundle. NOT what consent acknowledges -- see consentVersion. */
   version: string;
+  /** FR-ONB-007. The limitations statement version to send back on consent. */
+  consentVersion: string;
+  supportEmail: string;
+  /** Public pages on the backend. Open with lib/legal.ts. */
+  legal: { privacyPath: string; termsPath: string; accountDeletionPath: string };
+  account: {
+    heading: string;
+    deleteHeading: string;
+    deleteBody: string;
+    deleteConfirm: string;
+    deleted: string;
+    contact: string;
+  };
   limitationsStatement: string;
   safetyQuestions: SafetyQuestion[];
   referral: Record<string, string>;

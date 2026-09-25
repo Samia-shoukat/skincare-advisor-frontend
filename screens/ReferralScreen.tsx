@@ -42,9 +42,10 @@ import { color, radius, space, type } from '../lib/theme';
 interface Props {
   referral: Referral;
   onDone: () => void;
+  onAccount?: () => void;
 }
 
-export function ReferralScreen({ referral, onDone }: Props) {
+export function ReferralScreen({ referral, onDone, onAccount }: Props) {
   const [copy, setCopy] = useState<StringsBundle | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
 
@@ -80,6 +81,7 @@ export function ReferralScreen({ referral, onDone }: Props) {
         <>
           <Button label={copy.referralScreen.share} onPress={shareSummary} />
           <Button label="Done" tone="outline" onPress={onDone} />
+          {onAccount ? <Button label={copy.account.heading} tone="ghost" onPress={onAccount} /> : null}
         </>
       }
     >

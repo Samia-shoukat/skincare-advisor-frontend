@@ -30,6 +30,18 @@ import { computeMetricsFromLuma, FrameMetrics } from './captureGate';
  */
 const SAMPLE_STEP = 8;
 
+/**
+ * Whether this build has native frame processors compiled in.
+ *
+ * False in builds made with `VisionCamera_disableFrameProcessors=true` (see
+ * android/gradle.properties). Passing a frameProcessor to <Camera> in such a
+ * build throws at runtime, so callers must check this first. The post-capture
+ * gate is unaffected -- it is the path that actually works on this hardware
+ * (ADR-014).
+ */
+export const FRAME_PROCESSORS_ENABLED =
+  process.env.EXPO_PUBLIC_FRAME_PROCESSORS !== 'off';
+
 export interface FrameSampleResult {
   metrics: FrameMetrics;
   /** Milliseconds for the metrics pass, measured on the worklet thread. */

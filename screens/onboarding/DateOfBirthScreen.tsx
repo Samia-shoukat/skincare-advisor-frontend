@@ -26,6 +26,7 @@ import { Body, Button, FormScreen, Heading } from '../../components/ui';
 import { StepDots } from '../../components/StepDots';
 import { ApiError, api } from '../../lib/api';
 import { color, radius, space, type } from '../../lib/theme';
+import { useBackHandler } from '../../lib/useBackHandler';
 
 function computeAge(dob: Date, today: Date): number {
   let age = today.getFullYear() - dob.getFullYear();
@@ -61,6 +62,17 @@ export function DateOfBirthScreen({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Android back on the confirmation step returns to editing, like "Go back
+  // and edit" (FR-ONB-002). On the entry step it leaves the app as normal.
+  useBackHandler(
+    confirming
+      ? () => {
+          setConfirming(false);
+          return true;
+        }
+      : null,
+  );
 
   const monthRef = useRef<TextInput>(null);
   const yearRef = useRef<TextInput>(null);
