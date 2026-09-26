@@ -10,11 +10,7 @@
  * would mean two vocabularies for the same thing.
  */
 
-const baseUrl = process.env.EXPO_PUBLIC_API_URL;
-
-if (!baseUrl) {
-  throw new Error('EXPO_PUBLIC_API_URL must be set in .env');
-}
+import { getApiBase } from './apiBase';
 
 /** The error shape every failed request returns (IF-COMM-003). */
 export class ApiError extends Error {
@@ -36,6 +32,7 @@ async function request<T>(
 
   let response: Response;
   try {
+    const baseUrl = await getApiBase();
     response = await fetch(`${baseUrl}${path}`, {
       method,
       headers: {

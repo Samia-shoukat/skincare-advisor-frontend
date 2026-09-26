@@ -8,6 +8,7 @@
  * then make sure the file is gone.
  */
 
+import { getApiBase } from './apiBase';
 import type { ScanResponse } from './api';
 import { releaseImage } from './prepareImage';
 
@@ -54,7 +55,7 @@ export async function uploadImageAndRelease(
   token: string,
   idempotencyKey: string,
 ): Promise<ScanResponse> {
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+  const apiUrl = await getApiBase();
 
   if (!apiUrl) {
     throw new UploadError('EXPO_PUBLIC_API_URL is not configured');

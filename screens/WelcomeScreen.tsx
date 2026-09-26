@@ -28,9 +28,12 @@ import { color, radius, shadow, space, type } from '../lib/theme';
 export function WelcomeScreen({
   onRegister,
   onLogin,
+  onServerAddress,
 }: {
   onRegister: () => void;
   onLogin: () => void;
+  /** Test builds only; absent in a real release (see lib/apiBase.ts). */
+  onServerAddress?: () => void;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
@@ -92,6 +95,7 @@ export function WelcomeScreen({
       <View style={styles.legalLinks}>
         <LinkButton label="Privacy policy" onPress={() => openLegalPage('/legal/privacy')} />
         <LinkButton label="Terms of use" onPress={() => openLegalPage('/legal/terms')} />
+        {onServerAddress ? <LinkButton label="Server address" onPress={onServerAddress} /> : null}
       </View>
 
       <Modal

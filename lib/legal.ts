@@ -8,7 +8,9 @@
 
 import * as WebBrowser from 'expo-web-browser';
 
+import { getApiBase } from './apiBase';
+
 export async function openLegalPage(path: string): Promise<void> {
-  const base = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const base = await getApiBase();
   await WebBrowser.openBrowserAsync(`${base}${path}`);
 }

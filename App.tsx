@@ -23,9 +23,11 @@ import { color } from './lib/theme';
 import { AuthFormScreen, AuthMode } from './screens/AuthFormScreen';
 import { CaptureSpikeScreen } from './screens/CaptureSpikeScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
+import { SERVER_OVERRIDE_ALLOWED } from './lib/apiBase';
 import { clearRoutine } from './lib/routineCache';
 import { useBackHandler } from './lib/useBackHandler';
 import { OfflineRoutineFallback } from './screens/OfflineRoutineFallback';
+import { ServerAddressScreen } from './screens/ServerAddressScreen';
 import { OnboardingHomeScreen } from './screens/OnboardingHomeScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 
@@ -33,6 +35,7 @@ type Route =
   | { name: 'welcome' }
   | { name: 'form'; mode: AuthMode }
   | { name: 'forgot' }
+  | { name: 'server' }
   | { name: 'capture' }
   | { name: 'captureProd' };
 
@@ -90,6 +93,11 @@ function Root() {
   }
 
   if (!session) {
+    // Test builds only: lets a tester point the app at a new tunnel address
+    // without a rebuild. Absent from a real release (see lib/apiBase.ts).
+    if (route.name === 'server') {
+      return <ServerAddressScreen onDone={() => setRoute({ name: 'welcome' })} />;
+    }
     if (route.name === 'forgot') {
       return (
         <ForgotPasswordScreen onBack={() => setRoute({ name: 'form', mode: 'login' })} />
@@ -110,6 +118,9 @@ function Root() {
         <WelcomeScreen
           onRegister={() => setRoute({ name: 'form', mode: 'register' })}
           onLogin={() => setRoute({ name: 'form', mode: 'login' })}
+          onServerAddress={
+            SERVER_OVERRIDE_ALLOWED ? () => setRoute({ name: 'server' }) : undefined
+          }
         />
         {__DEV__ ? (
   <View style={styles.devBar}>
