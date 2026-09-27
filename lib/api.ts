@@ -10,7 +10,7 @@
  * would mean two vocabularies for the same thing.
  */
 
-import { getApiBase } from './apiBase';
+import { getApiBase, refreshApiBase, SERVER_OVERRIDE_ALLOWED } from './apiBase';
 
 /** The error shape every failed request returns (IF-COMM-003). */
 export class ApiError extends Error {
@@ -30,10 +30,8 @@ async function request<T>(
 ): Promise<T> {
   const { method = 'GET', body, token } = options;
 
-  let response: Response;
-  try {
-    const baseUrl = await getApiBase();
-    response = await fetch(`${baseUrl}${path}`, {
+  const send = async (baseUrl: string) =>
+    fetch(`${baseUrl}${path}`, {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -41,17 +39,51 @@ async function request<T>(
       },
       body: body ? JSON.stringify(body) : undefined,
     });
+
+  let response: Response;
+  try {
+    response = await send(await getApiBase());
   } catch {
-    // A network failure is not the same as a rejected request, and the user
-    // needs different advice for each.
-    throw new ApiError(0, 'NETWORK_ERROR', "Can't reach the server. Check your connection.");
+    // In a test build a network failure usually means the tunnel moved, and
+    // the new address is published where the app can find it. Look again and
+    // retry once before telling the user anything.
+    if (SERVER_OVERRIDE_ALLOWED) {
+      try {
+        response = await send(await refreshApiBase());
+      } catch {
+        throw new ApiError(0, 'NETWORK_ERROR', "Can't reach the server. Check your connection.");
+      }
+    } else {
+      // A network failure is not the same as a rejected request, and the user
+      // needs different advice for each.
+      throw new ApiError(0, 'NETWORK_ERROR', "Can't reach the server. Check your connection.");
+    }
   }
 
   if (response.status === 204) {
     return undefined as T;
   }
 
-  const payload = await response.json().catch(() => null);
+  let payload = await response.json().catch(() => null);
+
+  // An error with no JSON body did not come from this API: every failure it
+  // produces carries `errorCode` and `message` (IF-COMM-003). It is a tunnel
+  // or proxy error page, which in a test build means the address is stale --
+  // the request reached *something*, so the network-failure path above never
+  // fired and the app would otherwise sit on a dead address for good.
+  const looksLikeWrongServer =
+    !response.ok && payload === null && [404, 421, 502, 503, 504, 530].includes(response.status);
+
+  if (looksLikeWrongServer && SERVER_OVERRIDE_ALLOWED) {
+    try {
+      const retry = await send(await refreshApiBase());
+      if (retry.status === 204) return undefined as T;
+      response = retry;
+      payload = await retry.json().catch(() => null);
+    } catch {
+      // Keep the original failure below.
+    }
+  }
 
   if (!response.ok) {
     throw new ApiError(
@@ -142,6 +174,16 @@ export interface StringsBundle {
     offline: string;
     concernLabels: Record<string, string>;
     frequencyLabels: Record<string, string>;
+    /** One line per matrix ingredient: why this step is in the routine. */
+    ingredientPurpose: Record<string, string>;
+    profileHeading: string;
+    skinTypeLabel: string;
+    concernsLabel: string;
+    stepsLabel: string;
+    affordable: string;
+    premiumTier: string;
+    pharmacy: string;
+    skinTypeLabels: Record<string, string>;
   };
   referralScreen: {
     heading: string;

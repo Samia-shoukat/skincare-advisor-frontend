@@ -15,9 +15,10 @@
  * A checkbox at the top of unread text records a tap, not an acknowledgement.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
@@ -45,6 +46,10 @@ export function ConsentScreen({
   const [version, setVersion] = useState<string | null>(null);
   const [legal, setLegal] = useState<StringsBundle['legal'] | null>(null);
   const [readToEnd, setReadToEnd] = useState(false);
+  // Height of the visible scroll area, measured on layout. Needed to tell
+  // "there is more to read" from "it all fits already".
+  const viewportHeight = useRef(0);
+  const contentHeight = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,10 +71,36 @@ export function ConsentScreen({
     if (atEnd) setReadToEnd(true);
   }
 
+  /**
+   * Unlock Continue when the whole statement is already visible.
+   *
+   * Called from both handlers because their order is not guaranteed: if the
+   * layout is measured after the content, checking only in one of them leaves
+   * the button disabled forever. Each writes its own measurement, then asks.
+   */
+  function unlockIfNothingToScroll() {
+    const viewport = viewportHeight.current;
+    const content = contentHeight.current;
+    if (viewport > 0 && content > 0 && content <= viewport + 24) {
+      setReadToEnd(true);
+    }
+  }
+
   function onContentSizeChange(_: number, height: number) {
-    // Short statement on a tall screen — there is nothing to scroll, so
-    // requiring a scroll would leave the button permanently disabled.
-    if (height < 320) setReadToEnd(true);
+    // Nothing to scroll: the whole statement is on screen, so waiting for a
+    // scroll event that can never fire would disable Continue for good.
+    //
+    // Measured against the real viewport rather than a fixed number. The old
+    // guard of "height < 320" assumed a small screen; on a large phone the
+    // statement fits in 400px of a 700px view, nothing scrolls, and the button
+    // never unlocked -- which is what happened on a real device.
+    contentHeight.current = height;
+    unlockIfNothingToScroll();
+  }
+
+  function onViewportLayout(event: LayoutChangeEvent) {
+    viewportHeight.current = event.nativeEvent.layout.height;
+    unlockIfNothingToScroll();
   }
 
   async function accept() {
@@ -109,6 +140,7 @@ export function ConsentScreen({
             style={styles.scroll}
             contentContainerStyle={styles.scrollInner}
             onScroll={onScroll}
+            onLayout={onViewportLayout}
             onContentSizeChange={onContentSizeChange}
             scrollEventThrottle={16}
           >

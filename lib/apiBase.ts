@@ -32,6 +32,42 @@ export const SERVER_OVERRIDE_ALLOWED = process.env.EXPO_PUBLIC_ALLOW_SERVER_OVER
 
 let cached: string | null = null;
 
+/**
+ * Ask Supabase where the backend is right now.
+ *
+ * Test builds run against a laptop behind a temporary tunnel whose address
+ * changes on every reconnect. Supabase has a permanent address and the app
+ * already holds its key, so it makes a reliable noticeboard: the laptop
+ * publishes its current address there (scripts/publish_backend_url.py) and the
+ * app reads it.
+ *
+ * Only ever called when the build allows an override, and the answer is still
+ * checked by `isAcceptableBase`, so this cannot point the app at a plaintext
+ * server. Kept short and failure-tolerant: if the lookup is slow or fails, the
+ * built-in address is used.
+ */
+async function discover(): Promise<string | null> {
+  const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  if (!base || !key) return null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const response = await fetch(
+      `${base}/rest/v1/app_config?key=eq.backend_url&select=value`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` }, signal: controller.signal },
+    );
+    clearTimeout(timer);
+    if (!response.ok) return null;
+    const rows = (await response.json()) as { value?: string }[];
+    const value = rows?.[0]?.value;
+    return value && isAcceptableBase(value) ? value.replace(/\/+$/, '') : null;
+  } catch {
+    return null;
+  }
+}
+
 /** True for an address this app is willing to send a face photograph to. */
 export function isAcceptableBase(url: string): boolean {
   const trimmed = url.trim().replace(/\/+$/, '');
@@ -44,6 +80,8 @@ export function isAcceptableBase(url: string): boolean {
 export async function getApiBase(): Promise<string> {
   if (cached !== null) return cached;
   if (SERVER_OVERRIDE_ALLOWED) {
+    // A manually entered address wins: someone typing one is overriding
+    // whatever discovery would have said.
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored && isAcceptableBase(stored)) {
@@ -51,7 +89,13 @@ export async function getApiBase(): Promise<string> {
         return cached;
       }
     } catch {
-      // Fall through to the built-in address.
+      // Fall through.
+    }
+
+    const discovered = await discover();
+    if (discovered) {
+      cached = discovered;
+      return discovered;
     }
   }
   cached = BUILT_IN;
@@ -74,6 +118,41 @@ export async function setApiBase(url: string): Promise<boolean> {
   }
   cached = clean;
   return true;
+}
+
+/**
+ * Forget the cached address and look again.
+ *
+ * Called when a request fails with a network error: in a test build that
+ * usually means the tunnel rotated, and the new address is already on the
+ * noticeboard. Returns the address now in force.
+ */
+export async function refreshApiBase(): Promise<string> {
+  if (!SERVER_OVERRIDE_ALLOWED) return currentApiBase();
+  cached = null;
+
+  // Discovery FIRST, ahead of any saved address.
+  //
+  // A saved address normally wins, because someone typing one means it. But
+  // this path only runs after a request has already failed, and by then a
+  // saved address that no longer answers is not a preference -- it is a trap:
+  // it outranks discovery on every future launch, so the app stays stranded on
+  // a dead server until someone clears it by hand. That happened in testing.
+  //
+  // So a failure demotes the saved address: discovery is asked, and whatever
+  // it returns replaces the stored value.
+  const discovered = await discover();
+  if (discovered) {
+    cached = discovered;
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, discovered);
+    } catch {
+      // In-memory value still stands for this session.
+    }
+    return discovered;
+  }
+
+  return getApiBase();
 }
 
 /** Back to the address compiled into the build. */

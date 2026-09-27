@@ -26,6 +26,7 @@ import {
   api,
   ApiError,
   Eligibility,
+  Profile,
   Referral,
   Routine,
   StringsBundle,
@@ -56,6 +57,9 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
   const [eligibility, setEligibility] = useState<Eligibility | null>(null);
   const [screen, setScreen] = useState<Screen>({ name: 'home' });
   const [error, setError] = useState<string | null>(null);
+  // Skin type for the routine dashboard. From the profile (FR-ONB-006), never
+  // from the image.
+  const [profile, setProfile] = useState<Profile | null>(null);
 
   // Android back. Top-level screens (home, routine, a declared referral)
   // return false so back leaves the app as users expect; everything else steps
@@ -87,12 +91,15 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [bundle, status] = await Promise.all([
+      const [bundle, status, me] = await Promise.all([
         api.getStrings(),
         api.getScanEligibility(token),
+        // Never fatal: the routine renders without it, just without a skin type.
+        api.getProfile(token).catch(() => null),
       ]);
       setCopy(bundle);
       setEligibility(status);
+      setProfile(me);
 
       if (status.reason === 'REFERRAL_REQUIRED') {
         setScreen({ name: 'referral', referral: await api.getDeclaredReferral(token) });
@@ -171,6 +178,7 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
       <RoutineScreen
         routine={screen.routine}
         copy={copy}
+        skinType={profile?.skinType ?? null}
         offline={screen.offline}
         onDone={screen.offline ? load : undefined}
         onAccount={screen.offline ? undefined : openAccount}

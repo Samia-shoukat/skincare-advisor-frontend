@@ -8,11 +8,14 @@
  * then make sure the file is gone.
  */
 
-import { getApiBase } from './apiBase';
+import * as FileSystem from 'expo-file-system/legacy';
+
+import { getApiBase, refreshApiBase, SERVER_OVERRIDE_ALLOWED } from './apiBase';
 import type { ScanResponse } from './api';
 import { releaseImage } from './prepareImage';
 
 const SCAN_ENDPOINT_PATH = '/v1/scans/';
+const SCAN_BASE64_PATH = '/v1/scans/base64';
 
 /**
  * `errorCode` is the server's IF-COMM-003 code where there was one --
@@ -80,7 +83,9 @@ export async function uploadImageAndRelease(
     throw new UploadError('Not signed in');
   }
 
-  try {
+  // Built fresh for each attempt: a FormData holding a file URI cannot be
+  // replayed reliably once a request has consumed it.
+  const send = (base: string) => {
     const form = new FormData();
     form.append('image', {
       uri: preparedUri,
@@ -91,7 +96,7 @@ export async function uploadImageAndRelease(
     // safety flags from the stored profile (FR-ONB-006), so sending them would
     // only put pregnancy and treatment answers on the wire for nothing.
 
-    const response = await fetch(`${apiUrl}${SCAN_ENDPOINT_PATH}`, {
+    return fetch(`${base}${SCAN_ENDPOINT_PATH}`, {
       method: 'POST',
       // Content-Type is deliberately absent. fetch sets it along with the
       // multipart boundary; setting it by hand produces a body the server
@@ -103,6 +108,52 @@ export async function uploadImageAndRelease(
       },
       body: form,
     });
+  };
+
+  /**
+   * The same scan as JSON, with the image base64-encoded.
+   *
+   * Multipart uploads from React Native failed on a real device with no
+   * server-side trace: the request never arrived. This path has no streamed
+   * file handle and no multipart boundary -- it reads the file, encodes it,
+   * and posts an ordinary JSON body. About a third more bytes, which is why it
+   * is the fallback rather than the default.
+   */
+  const sendBase64 = async (base: string) => {
+    const imageBase64 = await FileSystem.readAsStringAsync(preparedUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return fetch(`${base}${SCAN_BASE64_PATH}`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({ imageBase64, contentType: 'image/jpeg' }),
+    });
+  };
+
+  try {
+    let response: Response;
+    try {
+      response = await send(apiUrl);
+    } catch (first) {
+      // The upload is the largest request the app makes and the one most
+      // likely to meet a tunnel that has just moved or dropped. Retrying on a
+      // freshly looked-up address costs one attempt and fixes the common case.
+      // The same Idempotency-Key is reused, so if the first attempt did reach
+      // the server, the retry returns that result rather than scanning twice.
+      const base = SERVER_OVERRIDE_ALLOWED ? await refreshApiBase() : apiUrl;
+      try {
+        response = await send(base);
+      } catch (second) {
+        // Multipart is not getting through from this device. Same scan, same
+        // idempotency key, different shape on the wire.
+        response = await sendBase64(base);
+      }
+    }
 
     const payload = await response.json().catch(() => null);
 
@@ -117,7 +168,11 @@ export async function uploadImageAndRelease(
     return payload as ScanResponse;
   } catch (err) {
     if (err instanceof UploadError) throw err;
-    throw new UploadError('Scan request failed', err);
+    // The underlying reason is included in test builds. "Scan request failed"
+    // on its own is unactionable: a dropped tunnel, a timeout and a refused
+    // connection all look identical, and they need different fixes.
+    const detail = SERVER_OVERRIDE_ALLOWED ? `: ${String(err)}` : '';
+    throw new UploadError(`Scan request failed${detail}`, err);
   } finally {
     // Runs on every path, including the throws above. This is the line the
     // whole function is built around.

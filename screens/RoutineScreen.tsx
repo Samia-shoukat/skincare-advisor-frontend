@@ -1,45 +1,75 @@
 /**
  * Routine screen. FR-REC-001, FR-REC-005, FR-REC-007, FR-ONB-008, FR-SUB-005.
  *
- * Morning and evening steps, each with a budget product, a premium product,
- * and the generic pharmacy option. A tier the catalogue could not safely fill
- * is simply not shown; the generic option always is.
+ * Three parts, in the order someone actually reads them:
+ *
+ *   1. Skin profile   -- skin type and what the scan noticed
+ *   2. Morning/Evening -- numbered steps, each with why it is there
+ *   3. Per step        -- an affordable product, a premium one, and the
+ *                         pharmacy wording for when neither is stocked
  *
  * ## The disclaimer never scrolls away (FR-REC-007)
  *
  * "The statement remains visible or reachable at any scroll position." It sits
- * in the FormScreen footer, which is outside the ScrollView, so it is on screen
+ * in the FormScreen footer, outside the ScrollView, so it is on screen
  * whatever the user has scrolled to.
  *
- * ## No concern identifiers
+ * ## No identifiers on screen
  *
- * Steps list the concerns they address by their display labels from the
- * server ("Breakouts"), never by identifier ("ACNE"). An identifier on this
- * screen reads as a diagnosis.
- *
- * All copy comes from the server string bundle (IF-UI-001).
+ * Concerns and skin types are shown through the server's label maps
+ * ("Breakouts", "Combination"), never as the raw enum value. "ACNE" on a
+ * routine screen reads as a diagnosis, and it is on the DR-008 condition-name
+ * list. Same for the "why this step" lines: they are server copy (IF-UI-001),
+ * not strings baked into this component.
  */
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Body, Button, Card, FormScreen, Heading } from '../components/ui';
-import type { Routine, RoutineStep, StringsBundle } from '../lib/api';
+import { Body, Button, FormScreen, Heading } from '../components/ui';
+import type { ProductOption, Routine, RoutineStep, StringsBundle } from '../lib/api';
 import { color, radius, space, type } from '../lib/theme';
+
+/** Purely decorative. The meaning of each step comes from the server copy. */
+const STEP_ICON: Record<RoutineStep['step'], string> = {
+  CLEANSE: '🧼',
+  TREAT: '✨',
+  MOISTURISE: '🌿',
+  PROTECT: '☀️',
+};
 
 interface Props {
   routine: Routine;
   copy: StringsBundle;
+  /** Skin type from the profile, shown on the dashboard card. */
+  skinType?: string | null;
   /** Shown when the routine came from the offline cache. */
   offline?: boolean;
   onDone?: () => void;
-  /** Account & privacy. Absent offline, where deletion can't work anyway. */
   onAccount?: () => void;
   onSignOut?: () => void;
 }
 
-export function RoutineScreen({ routine, copy, offline, onDone, onAccount, onSignOut }: Props) {
+export function RoutineScreen({
+  routine,
+  copy,
+  skinType,
+  offline,
+  onDone,
+  onAccount,
+  onSignOut,
+}: Props) {
   const c = copy.routineScreen;
+
+  // Every concern the routine addresses, in the order the steps address them,
+  // without repeats — one concern can be served by two steps.
+  const concerns = Array.from(
+    new Set([...routine.am, ...routine.pm].flatMap((s) => s.concerns)),
+  )
+    .map((id) => c.concernLabels[id])
+    .filter(Boolean);
+
+  const stepCount = routine.am.length + routine.pm.length;
 
   return (
     <FormScreen
@@ -56,16 +86,47 @@ export function RoutineScreen({ routine, copy, offline, onDone, onAccount, onSig
       }
     >
       <Heading>{c.heading}</Heading>
+
       {offline ? (
         <View style={styles.notice}>
           <Text style={styles.noticeText}>{c.offline}</Text>
         </View>
       ) : null}
 
+      {/* ---- Skin profile ------------------------------------------------ */}
+      <View style={styles.profile}>
+        <Text style={styles.profileHeading}>{c.profileHeading}</Text>
+
+        <View style={styles.profileRow}>
+          <Text style={styles.profileLabel}>{c.skinTypeLabel}</Text>
+          <Text style={styles.profileValue}>
+            {(skinType && c.skinTypeLabels[skinType]) || '—'}
+          </Text>
+        </View>
+
+        {concerns.length ? (
+          <View style={styles.profileBlock}>
+            <Text style={styles.profileLabel}>{c.concernsLabel}</Text>
+            <View style={styles.chips}>
+              {concerns.map((label) => (
+                <Text key={label} style={styles.chip}>
+                  {label}
+                </Text>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.profileRow}>
+          <Text style={styles.profileLabel}>{c.stepsLabel}</Text>
+          <Text style={styles.profileValue}>{stepCount}</Text>
+        </View>
+      </View>
+
       <Body muted>{c.startSlowly}</Body>
 
-      <Section title={c.morning} steps={routine.am} copy={copy} />
-      <Section title={c.evening} steps={routine.pm} copy={copy} />
+      <Section icon="☀️" title={c.morning} steps={routine.am} copy={copy} />
+      <Section icon="🌙" title={c.evening} steps={routine.pm} copy={copy} />
 
       {routine.omitted.length > 0 ? (
         <View style={styles.notice}>
@@ -73,17 +134,30 @@ export function RoutineScreen({ routine, copy, offline, onDone, onAccount, onSig
         </View>
       ) : null}
 
-      {/* FR-ONB-008. The server returns the unsubstantiated wording unless a
-          signed review record exists for this matrix version. */}
+      {/* FR-ONB-008. Unsubstantiated wording unless a signed review exists. */}
       <Text style={styles.claim}>{copy.reviewClaim}</Text>
     </FormScreen>
   );
 }
 
-function Section({ title, steps, copy }: { title: string; steps: RoutineStep[]; copy: StringsBundle }) {
+function Section({
+  icon,
+  title,
+  steps,
+  copy,
+}: {
+  icon: string;
+  title: string;
+  steps: RoutineStep[];
+  copy: StringsBundle;
+}) {
+  if (steps.length === 0) return null;
+
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionTitle}>
+        {icon}  {title}
+      </Text>
       {steps.map((step, index) => (
         <StepCard key={`${step.ruleId}-${index}`} step={step} number={index + 1} copy={copy} />
       ))}
@@ -91,63 +165,175 @@ function Section({ title, steps, copy }: { title: string; steps: RoutineStep[]; 
   );
 }
 
-function StepCard({ step, number, copy }: { step: RoutineStep; number: number; copy: StringsBundle }) {
+function StepCard({
+  step,
+  number,
+  copy,
+}: {
+  step: RoutineStep;
+  number: number;
+  copy: StringsBundle;
+}) {
   const c = copy.routineScreen;
-  const concerns = step.concerns.map((id) => c.concernLabels[id] ?? '').filter(Boolean);
-  const frequency = c.frequencyLabels[step.frequency] ?? '';
+  const purpose = c.ingredientPurpose[step.ingredient];
+  const frequency = c.frequencyLabels[step.frequency];
+  const concerns = step.concerns.map((id) => c.concernLabels[id]).filter(Boolean);
 
   return (
-    <Card>
-      <Text style={styles.stepTitle}>
-        {number}. {step.label}
-        {step.maxPercent != null ? ` (${step.maxPercent}% or lower)` : ''}
-      </Text>
-      <Text style={styles.meta}>
-        {frequency}
-        {concerns.length ? ` · ${c.for}: ${concerns.join(', ')}` : ''}
-      </Text>
+    <View style={styles.card}>
+      <View style={styles.cardHead}>
+        <Text style={styles.stepNumber}>{number}</Text>
+        <View style={styles.cardHeadText}>
+          <Text style={styles.stepTitle}>
+            {STEP_ICON[step.step]}  {step.label}
+            {step.maxPercent != null ? ` · up to ${step.maxPercent}%` : ''}
+          </Text>
+          {purpose ? <Text style={styles.purpose}>{purpose}</Text> : null}
+        </View>
+      </View>
+
+      <View style={styles.metaRow}>
+        {frequency ? <Text style={styles.metaPill}>{frequency}</Text> : null}
+        {concerns.map((label) => (
+          <Text key={label} style={styles.metaPillSoft}>
+            {label}
+          </Text>
+        ))}
+      </View>
 
       <View style={styles.options}>
         {step.products.budget ? (
-          <Option tier={c.budget} brand={step.products.budget.brand} name={step.products.budget.name} />
+          <Option tier={c.affordable} product={step.products.budget} />
         ) : null}
         {step.products.premium ? (
-          <Option tier={c.premium} brand={step.products.premium.brand} name={step.products.premium.name} />
+          <Option tier={c.premiumTier} product={step.products.premium} highlight />
         ) : null}
-        <Text style={styles.generic}>{step.products.generic}</Text>
+        <View style={styles.genericRow}>
+          <Text style={styles.genericLabel}>{c.pharmacy}</Text>
+          <Text style={styles.generic}>{step.products.generic}</Text>
+        </View>
       </View>
-    </Card>
+    </View>
   );
 }
 
-function Option({ tier, brand, name }: { tier: string; brand: string; name: string }) {
+function Option({
+  tier,
+  product,
+  highlight,
+}: {
+  tier: string;
+  product: ProductOption;
+  highlight?: boolean;
+}) {
   return (
-    <View style={styles.option}>
-      <Text style={styles.tier}>{tier}</Text>
-      <Text style={styles.product}>
-        {brand} {name}
+    <View style={[styles.option, highlight && styles.optionHighlight]}>
+      <Text style={[styles.tier, highlight && styles.tierHighlight]}>{tier}</Text>
+      <Text style={styles.productName}>
+        <Text style={styles.brand}>{product.brand}</Text> {product.name}
       </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { marginTop: space.lg, gap: space.sm },
-  sectionTitle: { ...type.title, color: color.text },
-  stepTitle: { ...type.bodyStrong, color: color.text },
-  meta: { ...type.small, color: color.textMuted, marginTop: space.xs },
-  options: { marginTop: space.md, gap: space.sm },
-  option: { flexDirection: 'row', gap: space.sm, alignItems: 'baseline' },
-  tier: {
+  // --- profile card ---
+  profile: {
+    backgroundColor: color.surface,
+    borderRadius: radius.card,
+    padding: space.lg,
+    marginTop: space.lg,
+    marginBottom: space.md,
+    gap: space.sm,
+    borderWidth: 1,
+    borderColor: color.line,
+  },
+  profileHeading: { ...type.title, color: color.text, marginBottom: space.xs },
+  profileRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  profileBlock: { gap: space.xs },
+  profileLabel: { ...type.small, color: color.textMuted },
+  profileValue: { ...type.bodyStrong, color: color.text },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.xs },
+  chip: {
     ...type.small,
     color: color.primary,
     backgroundColor: color.primarySoft,
     borderRadius: radius.pill,
+    paddingVertical: 3,
     paddingHorizontal: space.sm,
     overflow: 'hidden',
   },
-  product: { ...type.body, color: color.text, flexShrink: 1 },
+
+  // --- sections and step cards ---
+  section: { marginTop: space.xl, gap: space.md },
+  sectionTitle: { ...type.title, color: color.text },
+  card: {
+    backgroundColor: color.surface,
+    borderRadius: radius.card,
+    padding: space.lg,
+    borderWidth: 1,
+    borderColor: color.line,
+  },
+  cardHead: { flexDirection: 'row', gap: space.md },
+  cardHeadText: { flex: 1, gap: 2 },
+  stepNumber: {
+    ...type.bodyStrong,
+    color: color.onPrimary,
+    backgroundColor: color.primary,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    textAlign: 'center',
+    lineHeight: 28,
+    overflow: 'hidden',
+  },
+  stepTitle: { ...type.bodyStrong, color: color.text },
+  purpose: { ...type.small, color: color.textMuted },
+
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.md },
+  metaPill: {
+    ...type.small,
+    color: color.text,
+    backgroundColor: color.surfaceRaised,
+    borderRadius: radius.pill,
+    paddingVertical: 3,
+    paddingHorizontal: space.sm,
+    overflow: 'hidden',
+  },
+  metaPillSoft: {
+    ...type.small,
+    color: color.textMuted,
+    borderColor: color.line,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingVertical: 3,
+    paddingHorizontal: space.sm,
+    overflow: 'hidden',
+  },
+
+  // --- product options ---
+  options: { marginTop: space.md, gap: space.sm },
+  option: {
+    backgroundColor: color.surfaceRaised,
+    borderRadius: radius.field,
+    padding: space.md,
+    gap: 2,
+  },
+  optionHighlight: { backgroundColor: color.primarySoft },
+  tier: { ...type.small, color: color.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
+  tierHighlight: { color: color.primary },
+  productName: { ...type.body, color: color.text },
+  brand: { ...type.bodyStrong, color: color.text },
+  genericRow: { paddingHorizontal: space.md, paddingTop: space.xs, gap: 2 },
+  genericLabel: {
+    ...type.small,
+    color: color.textFaint,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   generic: { ...type.small, color: color.textMuted },
+
+  // --- notices ---
   notice: {
     backgroundColor: color.attentionSoft,
     borderLeftWidth: 3,
