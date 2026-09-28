@@ -184,6 +184,19 @@ export interface StringsBundle {
     premiumTier: string;
     pharmacy: string;
     skinTypeLabels: Record<string, string>;
+    vitalsHeading: string;
+    vitalsCaption: string;
+    /** MILD / MODERATE / PRONOUNCED, in words. Levels, not measurements. */
+    severityLabels: Record<string, string>;
+  };
+  home: {
+    greeting: string;
+    status: string;
+    scanTitle: string;
+    scanSubtitle: string;
+    routineTile: string;
+    accountTile: string;
+    noRoutine: string;
   };
   referralScreen: {
     heading: string;
@@ -264,6 +277,8 @@ export interface Routine {
   createdAt: string | null;
   am: RoutineStep[];
   pm: RoutineStep[];
+  /** What the scan found, with severity. Empty on routines made before this existed. */
+  concerns: { concernId: string; severity: string }[];
   omitted: { concern: string; reason: string }[];
 }
 

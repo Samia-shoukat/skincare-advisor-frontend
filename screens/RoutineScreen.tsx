@@ -27,6 +27,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Body, Button, FormScreen, Heading } from '../components/ui';
+import { SeverityMeter } from '../components/premium';
 import type { ProductOption, Routine, RoutineStep, StringsBundle } from '../lib/api';
 import { color, radius, space, type } from '../lib/theme';
 
@@ -104,24 +105,40 @@ export function RoutineScreen({
           </Text>
         </View>
 
-        {concerns.length ? (
-          <View style={styles.profileBlock}>
-            <Text style={styles.profileLabel}>{c.concernsLabel}</Text>
-            <View style={styles.chips}>
-              {concerns.map((label) => (
-                <Text key={label} style={styles.chip}>
-                  {label}
-                </Text>
-              ))}
-            </View>
-          </View>
-        ) : null}
-
         <View style={styles.profileRow}>
           <Text style={styles.profileLabel}>{c.stepsLabel}</Text>
           <Text style={styles.profileValue}>{stepCount}</Text>
         </View>
       </View>
+
+      {/* ---- Skin vitals -------------------------------------------------
+          Levels the analysis reported, not measurements. There is no hydration
+          or barrier number anywhere in this system, so none is shown. */}
+      {routine.concerns.length ? (
+        <View style={styles.vitals}>
+          <Text style={styles.profileHeading}>{c.vitalsHeading}</Text>
+          <Text style={styles.vitalsCaption}>{c.vitalsCaption}</Text>
+          {routine.concerns.map((entry) => (
+            <SeverityMeter
+              key={entry.concernId}
+              label={c.concernLabels[entry.concernId] ?? entry.concernId}
+              severity={entry.severity}
+              caption={c.severityLabels[entry.severity]}
+            />
+          ))}
+        </View>
+      ) : concerns.length ? (
+        <View style={styles.profileBlock}>
+          <Text style={styles.profileLabel}>{c.concernsLabel}</Text>
+          <View style={styles.chips}>
+            {concerns.map((label) => (
+              <Text key={label} style={styles.chip}>
+                {label}
+              </Text>
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       <Body muted>{c.startSlowly}</Body>
 
@@ -249,6 +266,15 @@ const styles = StyleSheet.create({
     borderColor: color.line,
   },
   profileHeading: { ...type.title, color: color.text, marginBottom: space.xs },
+  vitals: {
+    backgroundColor: color.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: color.line,
+    padding: space.lg,
+    marginBottom: space.md,
+  },
+  vitalsCaption: { ...type.small, color: color.textMuted },
   profileRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   profileBlock: { gap: space.xs },
   profileLabel: { ...type.small, color: color.textMuted },

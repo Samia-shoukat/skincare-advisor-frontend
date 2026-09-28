@@ -19,9 +19,10 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Body, Button, FormScreen, Heading } from '../components/ui';
+import { ActionTile, MiniTile, Pill, SectionLabel, SoftCard } from '../components/premium';
 import {
   api,
   ApiError,
@@ -32,7 +33,7 @@ import {
   StringsBundle,
 } from '../lib/api';
 import { clearRoutine, loadRoutine, saveRoutine } from '../lib/routineCache';
-import { color } from '../lib/theme';
+import { color, radius, space, type } from '../lib/theme';
 import { useBackHandler } from '../lib/useBackHandler';
 import { AccountScreen } from './AccountScreen';
 import { CaptureScreen } from './CaptureScreen';
@@ -221,33 +222,98 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
     );
   }
 
-  if (!eligibility.canScan) {
-    return (
-      <FormScreen footer={<Button label={copy.account.heading} tone="outline" onPress={openAccount} />}>
-        <Heading>{copy.scan.readyHeading}</Heading>
-        <Body muted>
-          {eligibility.reason === 'QUOTA_EXHAUSTED' ? copy.quotaExhausted : copy.scanBlockedSupport}
-        </Body>
-      </FormScreen>
-    );
-  }
+  // ---- Home dashboard -------------------------------------------------
+  // One screen with everything the MVP offers: who you are, the scan, your
+  // routine, and your account. Whether the scan tile is live is the server's
+  // decision (FR-SUB-002); this only draws the answer.
+  const blocked = !eligibility.canScan;
+  const blockedReason =
+    eligibility.reason === 'QUOTA_EXHAUSTED' ? copy.quotaExhausted : copy.scanBlockedSupport;
+  const hasRoutine = eligibility.reason === 'QUOTA_EXHAUSTED';
 
   return (
-    <FormScreen
-      footer={
-        <>
-          <Button label={copy.scan.start} onPress={() => setScreen({ name: 'capture' })} />
-          <Button label={copy.account.heading} tone="outline" onPress={openAccount} />
-        </>
-      }
-    >
-      <Heading>{copy.scan.readyHeading}</Heading>
-      <Body muted>{copy.scan.readyBody}</Body>
+    <FormScreen>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.greeting}>{copy.home.greeting} 🤍</Text>
+          <Text style={styles.status}>{copy.home.status}</Text>
+        </View>
+        <Text style={styles.avatar}>🫧</Text>
+      </View>
+
+      {profile?.skinType ? (
+        <View style={styles.profileStrip}>
+          <Pill label={copy.routineScreen.skinTypeLabels[profile.skinType] ?? ''} tone="solid" />
+          <Pill
+            label={`${eligibility.scansRemaining} ${
+              eligibility.scansRemaining === 1 ? 'scan left' : 'scans left'
+            }`}
+          />
+        </View>
+      ) : null}
+
+      <View style={styles.block}>
+        <SectionLabel>Today</SectionLabel>
+        {blocked ? (
+          <SoftCard>
+            <Text style={styles.blockedTitle}>{copy.scan.readyHeading}</Text>
+            <Text style={styles.blockedBody}>{blockedReason}</Text>
+          </SoftCard>
+        ) : (
+          <ActionTile
+            icon="🫧"
+            title={copy.home.scanTitle}
+            subtitle={copy.home.scanSubtitle}
+            onPress={() => setScreen({ name: 'capture' })}
+          />
+        )}
+      </View>
+
+      <View style={styles.tiles}>
+        <MiniTile
+          icon="🧴"
+          label={hasRoutine ? copy.home.routineTile : copy.home.noRoutine}
+          onPress={load}
+        />
+        <MiniTile icon="🤍" label={copy.home.accountTile} onPress={openAccount} />
+      </View>
+
+      <View style={styles.block}>
+        <SectionLabel>Good to know</SectionLabel>
+        <SoftCard tone="accent">
+          <Text style={styles.noteText}>{copy.scan.readyBody}</Text>
+        </SoftCard>
+      </View>
+
+      <Text style={styles.claim}>{copy.reviewClaim}</Text>
     </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: space.md,
+  },
+  greeting: { ...type.display, color: color.text },
+  status: { ...type.small, color: color.textMuted, marginTop: 2 },
+  avatar: {
+    fontSize: 30,
+    backgroundColor: color.surface,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    overflow: 'hidden',
+  },
+  profileStrip: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
+  block: { marginTop: space.xl },
+  tiles: { flexDirection: 'row', gap: space.md, marginTop: space.md },
+  blockedTitle: { ...type.bodyStrong, color: color.text, marginBottom: space.xs },
+  blockedBody: { ...type.body, color: color.textMuted },
+  noteText: { ...type.body, color: color.text },
+  claim: { ...type.small, color: color.textFaint, marginTop: space.xl, textAlign: 'center' },
   centre: {
     flex: 1,
     alignItems: 'center',
