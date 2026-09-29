@@ -11,6 +11,7 @@
  */
 
 import { getApiBase, refreshApiBase, SERVER_OVERRIDE_ALLOWED } from './apiBase';
+import { normaliseBundle } from './copyDefaults';
 
 /** The error shape every failed request returns (IF-COMM-003). */
 export class ApiError extends Error {
@@ -133,6 +134,38 @@ export interface SafetyQuestion {
 export interface StringsBundle {
   /** Version of the whole bundle. NOT what consent acknowledges -- see consentVersion. */
   version: string;
+  /**
+   * Navigation and section labels: tab names, the Today filters, the headings
+   * above groups of controls.
+   *
+   * Supplied locally by `normaliseBundle` rather than by the server. These name
+   * parts of the app, not anything about the user's skin, so IF-UI-001 has no
+   * claim on them -- and routing a tab label through a release of the backend
+   * would mean the tab bar renders blank against an older server. Kept in the
+   * bundle rather than in a separate constant so that screens read all their
+   * text from one place, and so the server can start supplying them later
+   * (for translation, say) without any screen changing.
+   */
+  nav: {
+    home: string;
+    routine: string;
+    today: string;
+    profile: string;
+    todayHeading: string;
+    filterToday: string;
+    filterUpcoming: string;
+    filterDone: string;
+    careOverview: string;
+    myRoutine: string;
+    seeAll: string;
+    logRoutine: string;
+    nothingToday: string;
+    allDone: string;
+    cleanse: string;
+    treat: string;
+    moisturise: string;
+    protect: string;
+  };
   /** FR-ONB-007. The limitations statement version to send back on consent. */
   consentVersion: string;
   supportEmail: string;
@@ -359,8 +392,14 @@ export const api = {
       body: { acknowledgedVersion },
     }),
 
-  /** IF-UI-001. Every claim in the app comes from here. */
-  getStrings: () => request<StringsBundle>('/v1/content/strings'),
+  /**
+   * IF-UI-001. Every claim in the app comes from here.
+   *
+   * Passed through `normaliseBundle` so that a server missing a block cannot
+   * crash the app on launch. Claim text is never filled in locally.
+   */
+  getStrings: async () =>
+    normaliseBundle(await request<StringsBundle>('/v1/content/strings')),
 
   getQuestionnaire: () => request<Questionnaire>('/v1/content/questionnaire'),
 

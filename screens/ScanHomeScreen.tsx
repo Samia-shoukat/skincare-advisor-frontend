@@ -1,28 +1,44 @@
 /**
- * Scan home. What an onboarded user sees.
+ * The signed-in area: four tabs and two full-screen sub-screens.
  *
- * Asks the server whether a scan is permitted before offering the camera
- * (FR-SUB-002 calls this a display convenience; the server re-checks on
- * submit). The answer decides the screen:
+ *   Home     -- greeting, the scan action, a shelf of today's routine
+ *   Routine  -- the saved routine, or a prompt to scan
+ *   Today    -- the routine as a checklist
+ *   Profile  -- privacy, terms, support, sign out, delete
  *
- *   canScan           -> the start button, then the camera
- *   REFERRAL_REQUIRED -> the declared referral, with no camera at all. FR-TRI-001
- *                        requires that no image is captured for a flagged user,
- *                        so the capture screen is never mounted -- the camera
- *                        permission prompt does not even appear.
- *   QUOTA_EXHAUSTED   -> the saved routine, in full (FR-SUB-005, UC-007)
+ * Capture and referral take over the whole screen and carry a back arrow, so
+ * there is always one obvious way out.
  *
- * Offline, the last routine saved on this phone is shown instead (SRS 2.4).
+ * ## What decides what
  *
- * The camera permission is requested inside CaptureScreen, i.e. at the point of
- * first use rather than at launch (IF-HW-001).
+ * The server decides whether a scan is allowed (FR-SUB-002) and whether a
+ * referral applies (FR-TRI-001); this file only draws the answer. A flagged
+ * user never reaches the capture screen, so the camera permission prompt never
+ * appears for them.
+ *
+ * Offline, the routine tab shows the copy saved on the phone (SRS 2.4).
+ *
+ * ## Tick state lives here
+ *
+ * The Today tab is a view over it, and Home shows the next outstanding step, so
+ * the set belongs above both rather than inside either. It is device-local and
+ * never uploaded -- see lib/routineLog.ts.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-import { Body, Button, FormScreen, Heading } from '../components/ui';
-import { ActionTile, MiniTile, Pill, SectionLabel, SoftCard } from '../components/premium';
+import {
+  GlassCard,
+  IconButton,
+  SectionHeader,
+  Shelf,
+  ShelfCard,
+  StatusPill,
+} from '../components/glass';
+import { ActionTile } from '../components/premium';
+import { Screen, TabDefinition, TabKey } from '../components/navigation';
+import { Body, Button, Heading } from '../components/ui';
 import {
   api,
   ApiError,
@@ -30,22 +46,29 @@ import {
   Profile,
   Referral,
   Routine,
+  RoutineStep,
   StringsBundle,
 } from '../lib/api';
 import { clearRoutine, loadRoutine, saveRoutine } from '../lib/routineCache';
-import { color, radius, space, type } from '../lib/theme';
+import { clearRoutineLog, loadTicks, saveTicks, stepId } from '../lib/routineLog';
+import { color, space, type } from '../lib/theme';
 import { useBackHandler } from '../lib/useBackHandler';
 import { AccountScreen } from './AccountScreen';
 import { CaptureScreen } from './CaptureScreen';
 import { ReferralScreen } from './ReferralScreen';
 import { RoutineScreen } from './RoutineScreen';
+import { TodayScreen } from './TodayScreen';
 
-type Screen =
-  | { name: 'home' }
-  | { name: 'capture' }
-  | { name: 'referral'; referral: Referral }
-  | { name: 'routine'; routine: Routine; offline?: boolean }
-  | { name: 'account'; returnTo: Screen };
+/** A sub-screen covers the tabs; null means a tab is showing. */
+type Overlay = { name: 'capture' } | { name: 'referral'; referral: Referral } | null;
+
+/** Decorative. Every card carries the server's label beside it. */
+const STEP_GLYPH: Record<RoutineStep['step'], string> = {
+  CLEANSE: '🧼',
+  TREAT: '✨',
+  MOISTURISE: '🌿',
+  PROTECT: '☀️',
+};
 
 interface Props {
   token: string;
@@ -56,37 +79,64 @@ interface Props {
 export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
   const [copy, setCopy] = useState<StringsBundle | null>(null);
   const [eligibility, setEligibility] = useState<Eligibility | null>(null);
-  const [screen, setScreen] = useState<Screen>({ name: 'home' });
-  const [error, setError] = useState<string | null>(null);
-  // Skin type for the routine dashboard. From the profile (FR-ONB-006), never
-  // from the image.
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [routine, setRoutine] = useState<Routine | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [tab, setTab] = useState<TabKey>('home');
+  const [overlay, setOverlay] = useState<Overlay>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [ticks, setTicks] = useState<Set<string>>(new Set());
 
-  // Android back. Top-level screens (home, routine, a declared referral)
-  // return false so back leaves the app as users expect; everything else steps
-  // back one screen. Capture and Account handle their own.
+  // Android back: leave a sub-screen, or return to Home from another tab. On
+  // Home it returns false, so back leaves the app as users expect.
   useBackHandler(
-    screen.name === 'referral' && screen.referral.kind === 'OBSERVED'
+    overlay
       ? () => {
-          load();
+          setOverlay(null);
           return true;
         }
-      : null,
+      : tab !== 'home'
+        ? () => {
+            setTab('home');
+            return true;
+          }
+        : null,
   );
-  const openAccount = () => setScreen({ name: 'account', returnTo: screen });
 
   const signOut = useCallback(async () => {
-    // DR-002: nothing of this account stays on the phone after it leaves.
+    // DR-002: nothing of this account stays on the phone.
     await clearRoutine(userId);
+    await clearRoutineLog(userId);
     onSignOut();
   }, [userId, onSignOut]);
 
-  const showRoutine = useCallback(
-    async (routine: Routine, bundle: StringsBundle) => {
-      await saveRoutine(userId, routine, bundle);
-      setScreen({ name: 'routine', routine });
+  const toggleTick = useCallback(
+    (id: string) => {
+      setTicks((previous) => {
+        const next = new Set(previous);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        void saveTicks(userId, next);
+        return next;
+      });
     },
     [userId],
+  );
+
+  /** Tick every step for one time of day at once. */
+  const logRoutine = useCallback(
+    (when: 'am' | 'pm') => {
+      if (!routine) return;
+      const list = when === 'am' ? routine.am : routine.pm;
+      setTicks((previous) => {
+        const next = new Set(previous);
+        list.forEach((step, index) => next.add(stepId(when, index, step.ruleId)));
+        void saveTicks(userId, next);
+        return next;
+      });
+      setTab('today');
+    },
+    [routine, userId],
   );
 
   const load = useCallback(async () => {
@@ -95,60 +145,59 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
       const [bundle, status, me] = await Promise.all([
         api.getStrings(),
         api.getScanEligibility(token),
-        // Never fatal: the routine renders without it, just without a skin type.
         api.getProfile(token).catch(() => null),
       ]);
       setCopy(bundle);
       setEligibility(status);
       setProfile(me);
+      setOffline(false);
 
       if (status.reason === 'REFERRAL_REQUIRED') {
-        setScreen({ name: 'referral', referral: await api.getDeclaredReferral(token) });
+        setOverlay({ name: 'referral', referral: await api.getDeclaredReferral(token) });
         return;
       }
 
-      if (status.reason === 'QUOTA_EXHAUSTED') {
-        // FR-SUB-005: the allowance restricts new analysis, not access to the
-        // routine already received.
-        try {
-          await showRoutine(await api.getLatestRoutine(token), bundle);
-          return;
-        } catch (e) {
-          if (!(e instanceof ApiError && e.errorCode === 'NO_ROUTINE')) throw e;
-        }
+      // FR-SUB-005: the allowance restricts new analysis, not access to a
+      // routine already received.
+      try {
+        const saved = await api.getLatestRoutine(token);
+        setRoutine(saved);
+        await saveRoutine(userId, saved, bundle);
+      } catch (e) {
+        if (!(e instanceof ApiError && e.errorCode === 'NO_ROUTINE')) throw e;
+        setRoutine(null);
       }
-
-      setScreen({ name: 'home' });
+      setOverlay(null);
     } catch (e) {
-      // SRS 2.4: stored routines are viewable offline.
+      // SRS 2.4: a saved routine is viewable offline.
       if (e instanceof ApiError && e.errorCode === 'NETWORK_ERROR') {
         const saved = await loadRoutine(userId);
         if (saved) {
           setCopy(saved.copy);
-          setScreen({ name: 'routine', routine: saved.routine, offline: true });
+          setRoutine(saved.routine);
+          setOffline(true);
+          setTab('routine');
           return;
         }
       }
       setError(e instanceof ApiError ? e.message : 'Something went wrong.');
     }
-  }, [token, userId, showRoutine]);
+  }, [token, userId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const showDeclaredReferral = async () => {
-    try {
-      setScreen({ name: 'referral', referral: await api.getDeclaredReferral(token) });
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Something went wrong.');
-      setScreen({ name: 'home' });
-    }
-  };
+  useEffect(() => {
+    loadTicks(userId).then(setTicks);
+  }, [userId]);
+
+  // ---- error and loading -------------------------------------------------
 
   if (error) {
     return (
-      <FormScreen
+      <Screen
+        title="Skinsight"
         footer={
           <>
             <Button label="Try again" onPress={load} />
@@ -156,39 +205,13 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
           </>
         }
       >
-        <Heading>Can't load your scan</Heading>
+        <Heading>Can't load your account</Heading>
         <Body muted>{error}</Body>
-      </FormScreen>
+      </Screen>
     );
   }
 
-  if (screen.name === 'account' && copy) {
-    return (
-      <AccountScreen
-        token={token}
-        userId={userId}
-        copy={copy}
-        onBack={() => setScreen(screen.returnTo)}
-        onSignOut={onSignOut}
-      />
-    );
-  }
-
-  if (screen.name === 'routine' && copy) {
-    return (
-      <RoutineScreen
-        routine={screen.routine}
-        copy={copy}
-        skinType={profile?.skinType ?? null}
-        offline={screen.offline}
-        onDone={screen.offline ? load : undefined}
-        onAccount={screen.offline ? undefined : openAccount}
-        onSignOut={screen.offline ? signOut : undefined}
-      />
-    );
-  }
-
-  if (!copy || !eligibility) {
+  if (!copy || (!eligibility && !offline)) {
     return (
       <View style={styles.centre}>
         <ActivityIndicator color={color.primary} />
@@ -196,128 +219,232 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
     );
   }
 
-  if (screen.name === 'referral') {
-    // For a declared referral, "Done" re-checks eligibility, which leads back
-    // here while the flag is set. That is intended: there is nothing else this
-    // account can do until its safety answers change.
-    return <ReferralScreen referral={screen.referral} onDone={load} onAccount={openAccount} />;
-  }
+  // ---- sub-screens -------------------------------------------------------
 
-  if (screen.name === 'capture') {
+  if (overlay?.name === 'capture') {
     return (
       <CaptureScreen
         copy={{ retake: copy.scan.retake, retakeGuidance: copy.scan.retakeGuidance }}
         onScanComplete={(result) => {
           if (result.outcome === 'REFERRAL' && result.referral) {
-            setScreen({ name: 'referral', referral: result.referral });
-          } else if (result.routine) {
-            showRoutine(result.routine, copy);
+            setOverlay({ name: 'referral', referral: result.referral });
           } else {
+            setOverlay(null);
+            setTab('routine');
             load();
           }
         }}
-        onReferralRequired={showDeclaredReferral}
-        onExit={load}
+        onReferralRequired={async () => {
+          try {
+            setOverlay({ name: 'referral', referral: await api.getDeclaredReferral(token) });
+          } catch {
+            setOverlay(null);
+          }
+        }}
+        onExit={() => setOverlay(null)}
       />
     );
   }
 
-  // ---- Home dashboard -------------------------------------------------
-  // One screen with everything the MVP offers: who you are, the scan, your
-  // routine, and your account. Whether the scan tile is live is the server's
-  // decision (FR-SUB-002); this only draws the answer.
-  const blocked = !eligibility.canScan;
+  if (overlay?.name === 'referral') {
+    return (
+      <ReferralScreen
+        referral={overlay.referral}
+        copy={copy}
+        // A declared referral has nowhere to go back to: the account cannot
+        // scan until its safety answers change, so it gets no back arrow.
+        onBack={overlay.referral.kind === 'OBSERVED' ? () => setOverlay(null) : undefined}
+        onDone={() => {
+          setOverlay(null);
+          load();
+        }}
+      />
+    );
+  }
+
+  // ---- tabs --------------------------------------------------------------
+
+  const nav = copy.nav;
+  const tabs: TabDefinition[] = [
+    { key: 'home', icon: '🏠', label: nav.home },
+    { key: 'routine', icon: '🧴', label: nav.routine },
+    { key: 'today', icon: '🗓', label: nav.today },
+    { key: 'account', icon: '🤍', label: nav.profile },
+  ];
+  const shell = { tabs, activeTab: tab, onTabPress: setTab };
+
+  if (tab === 'account') {
+    return (
+      <AccountScreen
+        token={token}
+        userId={userId}
+        copy={copy}
+        onBack={() => setTab('home')}
+        onSignOut={onSignOut}
+        shell={shell}
+      />
+    );
+  }
+
+  if (tab === 'today') {
+    return (
+      <TodayScreen
+        routine={routine}
+        copy={copy}
+        ticks={ticks}
+        onToggle={toggleTick}
+        shell={shell}
+      />
+    );
+  }
+
+  if (tab === 'routine') {
+    if (!routine) {
+      return (
+        <Screen title={nav.routine} {...shell}>
+          <GlassCard tone="strong">
+            <Text style={styles.emptyTitle}>{copy.home.noRoutine}</Text>
+            <Text style={styles.emptyBody}>{copy.scan.readyBody}</Text>
+          </GlassCard>
+          {eligibility?.canScan ? (
+            <View style={styles.block}>
+              <ActionTile
+                icon="🫧"
+                title={copy.home.scanTitle}
+                subtitle={copy.home.scanSubtitle}
+                onPress={() => setOverlay({ name: 'capture' })}
+              />
+            </View>
+          ) : null}
+        </Screen>
+      );
+    }
+    return (
+      <RoutineScreen
+        routine={routine}
+        copy={copy}
+        skinType={profile?.skinType ?? null}
+        offline={offline}
+        onLogRoutine={logRoutine}
+        shell={shell}
+      />
+    );
+  }
+
+  // ---- home --------------------------------------------------------------
+
+  const blocked = !eligibility?.canScan;
   const blockedReason =
-    eligibility.reason === 'QUOTA_EXHAUSTED' ? copy.quotaExhausted : copy.scanBlockedSupport;
-  const hasRoutine = eligibility.reason === 'QUOTA_EXHAUSTED';
+    eligibility?.reason === 'QUOTA_EXHAUSTED' ? copy.quotaExhausted : copy.scanBlockedSupport;
+
+  // The whole routine as a flat list, so Home can show what is still
+  // outstanding without duplicating the Today tab's filtering.
+  const allSteps = routine
+    ? [
+        ...routine.am.map((step, i) => ({ id: stepId('am', i, step.ruleId), step })),
+        ...routine.pm.map((step, i) => ({ id: stepId('pm', i, step.ruleId), step })),
+      ]
+    : [];
+  const outstanding = allSteps.filter((entry) => !ticks.has(entry.id));
 
   return (
-    <FormScreen>
+    <Screen
+      // The reference has a notification bell here. There are no
+      // notifications in this app -- nothing schedules one, nothing would fire
+      // -- and a bell that opens something unrelated teaches the wrong thing
+      // about what the icon means. The slot goes to the account instead, which
+      // is what a circular control in that corner usually is.
+      headerRight={<IconButton glyph="👤" label={nav.profile} onPress={() => setTab('account')} />}
+      {...shell}
+    >
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>{copy.home.greeting} 🤍</Text>
-          <Text style={styles.status}>{copy.home.status}</Text>
-        </View>
-        <Text style={styles.avatar}>🫧</Text>
+        <Text style={styles.greeting}>{copy.home.greeting}</Text>
+        {copy.home.status ? <Text style={styles.status}>{copy.home.status}</Text> : null}
       </View>
 
-      {profile?.skinType ? (
-        <View style={styles.profileStrip}>
-          <Pill label={copy.routineScreen.skinTypeLabels[profile.skinType] ?? ''} tone="solid" />
-          <Pill
+      <View style={styles.strip}>
+        {profile?.skinType && copy.routineScreen.skinTypeLabels[profile.skinType] ? (
+          <StatusPill label={copy.routineScreen.skinTypeLabels[profile.skinType]} />
+        ) : null}
+        {eligibility ? (
+          <StatusPill
+            tone="neutral"
             label={`${eligibility.scansRemaining} ${
               eligibility.scansRemaining === 1 ? 'scan left' : 'scans left'
             }`}
           />
-        </View>
-      ) : null}
+        ) : null}
+      </View>
 
+      {/* ---- the scan action ---------------------------------------------- */}
       <View style={styles.block}>
-        <SectionLabel>Today</SectionLabel>
         {blocked ? (
-          <SoftCard>
-            <Text style={styles.blockedTitle}>{copy.scan.readyHeading}</Text>
-            <Text style={styles.blockedBody}>{blockedReason}</Text>
-          </SoftCard>
+          <GlassCard tone="strong">
+            <Text style={styles.emptyTitle}>{copy.scan.readyHeading}</Text>
+            <Text style={styles.emptyBody}>{blockedReason}</Text>
+          </GlassCard>
         ) : (
           <ActionTile
             icon="🫧"
             title={copy.home.scanTitle}
             subtitle={copy.home.scanSubtitle}
-            onPress={() => setScreen({ name: 'capture' })}
+            onPress={() => setOverlay({ name: 'capture' })}
           />
         )}
       </View>
 
-      <View style={styles.tiles}>
-        <MiniTile
-          icon="🧴"
-          label={hasRoutine ? copy.home.routineTile : copy.home.noRoutine}
-          onPress={load}
-        />
-        <MiniTile icon="🤍" label={copy.home.accountTile} onPress={openAccount} />
-      </View>
+      {/* ---- the routine, as a shelf -------------------------------------- */}
+      {allSteps.length > 0 ? (
+        <View style={styles.block}>
+          <SectionHeader
+            title={nav.myRoutine}
+            actionLabel={nav.seeAll}
+            onAction={() => setTab('routine')}
+          />
+          <Shelf>
+            {allSteps.map((entry) => (
+              <ShelfCard
+                key={entry.id}
+                glyph={STEP_GLYPH[entry.step.step]}
+                title={entry.step.label}
+                status={copy.routineScreen.frequencyLabels[entry.step.frequency]}
+                tone={ticks.has(entry.id) ? 'neutral' : 'calm'}
+                onPress={() => setTab('routine')}
+              />
+            ))}
+          </Shelf>
+        </View>
+      ) : null}
 
-      <View style={styles.block}>
-        <SectionLabel>Good to know</SectionLabel>
-        <SoftCard tone="accent">
-          <Text style={styles.noteText}>{copy.scan.readyBody}</Text>
-        </SoftCard>
-      </View>
+      {/* ---- what is left today ------------------------------------------- */}
+      {allSteps.length > 0 ? (
+        <View style={styles.block}>
+          <SectionHeader
+            title={nav.todayHeading}
+            actionLabel={nav.seeAll}
+            onAction={() => setTab('today')}
+          />
+          <GlassCard tone="strong">
+            <Text style={styles.emptyBody}>
+              {outstanding.length === 0 ? nav.allDone : outstanding[0].step.label}
+            </Text>
+          </GlassCard>
+        </View>
+      ) : null}
 
       <Text style={styles.claim}>{copy.reviewClaim}</Text>
-    </FormScreen>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: space.md,
-  },
+  centre: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: color.ground },
+  header: { marginTop: space.xs },
   greeting: { ...type.display, color: color.text },
-  status: { ...type.small, color: color.textMuted, marginTop: 2 },
-  avatar: {
-    fontSize: 30,
-    backgroundColor: color.surface,
-    borderRadius: radius.pill,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    overflow: 'hidden',
-  },
-  profileStrip: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
+  status: { ...type.small, color: color.textMuted, marginTop: space.xs },
+  strip: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.md },
   block: { marginTop: space.xl },
-  tiles: { flexDirection: 'row', gap: space.md, marginTop: space.md },
-  blockedTitle: { ...type.bodyStrong, color: color.text, marginBottom: space.xs },
-  blockedBody: { ...type.body, color: color.textMuted },
-  noteText: { ...type.body, color: color.text },
+  emptyTitle: { ...type.bodyStrong, color: color.text, marginBottom: space.xs },
+  emptyBody: { ...type.body, color: color.textMuted },
   claim: { ...type.small, color: color.textFaint, marginTop: space.xl, textAlign: 'center' },
-  centre: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: color.ground,
-  },
 });

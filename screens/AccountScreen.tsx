@@ -17,7 +17,8 @@
 import React, { useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 
-import { Body, Button, Card, FormScreen, Heading, LinkButton } from '../components/ui';
+import { Body, Button, Card, Heading, LinkButton } from '../components/ui';
+import { Screen } from '../components/navigation';
 import { api, ApiError, StringsBundle } from '../lib/api';
 import { openLegalPage } from '../lib/legal';
 import { clearRoutine } from '../lib/routineCache';
@@ -30,11 +31,17 @@ interface Props {
   copy: StringsBundle;
   onBack: () => void;
   onSignOut: () => void;
+  /** Tab bar wiring, so Account reads as a tab rather than a dead end. */
+  shell?: {
+    tabs: React.ComponentProps<typeof Screen>['tabs'];
+    activeTab: React.ComponentProps<typeof Screen>['activeTab'];
+    onTabPress: React.ComponentProps<typeof Screen>['onTabPress'];
+  };
 }
 
 type Stage = 'menu' | 'confirm' | 'deleting' | 'deleted';
 
-export function AccountScreen({ token, userId, copy, onBack, onSignOut }: Props) {
+export function AccountScreen({ token, userId, copy, onBack, onSignOut, shell }: Props) {
   const [stage, setStage] = useState<Stage>('menu');
   const [error, setError] = useState<string | null>(null);
   const a = copy.account;
@@ -73,15 +80,17 @@ export function AccountScreen({ token, userId, copy, onBack, onSignOut }: Props)
 
   if (stage === 'deleted') {
     return (
-      <FormScreen footer={<Button label="Done" onPress={onSignOut} />}>
+      <Screen title={a.deleteHeading} footer={<Button label="Done" onPress={onSignOut} />}>
         <Heading>{a.deleted}</Heading>
-      </FormScreen>
+      </Screen>
     );
   }
 
   if (stage === 'confirm' || stage === 'deleting') {
     return (
-      <FormScreen
+      <Screen
+        title={a.deleteHeading}
+        onBack={stage === 'deleting' ? undefined : () => setStage('menu')}
         footer={
           <>
             <Button
@@ -104,21 +113,17 @@ export function AccountScreen({ token, userId, copy, onBack, onSignOut }: Props)
           <Text style={styles.warningText}>{a.deleteBody}</Text>
         </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
-      </FormScreen>
+      </Screen>
     );
   }
 
   return (
-    <FormScreen
-      footer={
-        <>
-          <Button label="Sign out" tone="outline" onPress={signOut} />
-          <Button label="Back" tone="ghost" onPress={onBack} />
-        </>
-      }
+    <Screen
+      title={a.heading}
+      onBack={onBack}
+      footer={<Button label="Sign out" tone="outline" onPress={signOut} />}
+      {...(shell ?? {})}
     >
-      <Heading>{a.heading}</Heading>
-
       <Card>
         <View style={styles.links}>
           <LinkButton label="Privacy policy" onPress={() => openLegalPage(copy.legal.privacyPath)} />
@@ -139,7 +144,7 @@ export function AccountScreen({ token, userId, copy, onBack, onSignOut }: Props)
       <View style={styles.dangerZone}>
         <Button label={a.deleteHeading} tone="outline" onPress={() => setStage('confirm')} />
       </View>
-    </FormScreen>
+    </Screen>
   );
 }
 

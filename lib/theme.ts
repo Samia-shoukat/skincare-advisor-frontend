@@ -1,65 +1,87 @@
 /**
  * Design tokens — Skinsight.
  *
- * Matcha and cream: a green-cast cream ground, deep matcha for action, cocoa
- * for text.
+ * Soft lilac and blush: a pale violet ground, plum for text, muted violet for
+ * action.
  *
- * The cream is pulled toward green rather than toward beige, and that is the
- * whole difference between this and the cream-and-terracotta palette every
- * wellness app already uses. A beige cream needs a warm accent to feel alive,
- * which is how everyone ends up at terracotta. A green-cast cream is already
- * carrying the accent, so the greens can stay quiet and the one warm colour
- * left over can be saved for something that matters.
+ * Pastel is the easy part; contrast is the part that usually breaks. Plum text
+ * on pale lilac clears WCAG AA comfortably, and the violet used for buttons is
+ * dark enough to carry white label text -- a prettier, lighter violet would
+ * fail both and is the reason most pastel apps end up unreadable in sunlight
+ * (IF-UI-003).
  *
- * Cocoa rather than grey or black for text. Grey on a warm ground reads dirty;
- * true black reads like a form, not like something you'd open at midnight to
- * look at your own face.
+ * Shadows, not borders, do the separating. The shadow is plum-tinted rather
+ * than black, because a black shadow over lilac turns grey and kills the wash.
  *
- * One discipline holds the system together: `attention` is the only saturated
- * warm colour in ordinary use, and it appears on exactly two screens — the
- * referral result and a restricted account. Everything else earns emphasis
- * through weight, size and space.
+ * One discipline holds: `attention` is the only warm colour in ordinary use,
+ * and it appears on exactly two screens -- the referral result and a restricted
+ * account. Everything else earns emphasis through weight, size and space.
  */
 
 export const color = {
   /**
-   * Page wash, top to bottom. Three stops within a couple of percent of each
-   * other, drifting cream → matcha. It should read as light, not as a gradient.
+   * Page wash, top to bottom: blush → lilac → blush. Warmer and a touch more
+   * saturated than a near-white wash, because the glass surfaces below are
+   * translucent — they have nothing to show through them unless the ground
+   * carries actual colour.
    */
-  gradient: ['#F7F5EC', '#F3F3E8', '#ECF1E4'] as const,
+  gradient: ['#FBE7F0', '#EFE4F8', '#F7E7F0'] as const,
 
-  ground: '#F5F4EA',
+  ground: '#F5EAF5',
   /** Cards. Warm white — pure white on cream reads cold and slightly blue. */
-  surface: '#FFFDF7',
-  surfaceRaised: '#FAF9F0',
+  surface: '#FFFFFF',
+  surfaceRaised: '#F8F3FC',
+
+  // ---------------------------------------------------------------------
+  // Glass
+  //
+  // Translucent white over the gradient, not a blur. `expo-blur` is a native
+  // module, and adding one here would mean another prebuild and native
+  // rebuild — the part of this project that has been most fragile. Over a
+  // soft two-stop wash, a white fill at ~60% with a brighter hairline on top
+  // produces the same read: the colour beneath shifts across the card, and
+  // the edge catches light. A real blur would only differ where there is
+  // high-frequency detail behind the card, and here there never is.
+  //
+  // Opacity is deliberately high. Glass at 25% looks better in a mockup and
+  // fails in sunlight, which is where this app gets used (IF-UI-003).
+  // ---------------------------------------------------------------------
+  /** Standard glass panel. */
+  glass: 'rgba(255, 255, 255, 0.62)',
+  /** For panels carrying body text, where legibility outranks the effect. */
+  glassStrong: 'rgba(255, 255, 255, 0.82)',
+  /** The lit edge. This, not the fill, is what reads as "glass". */
+  glassBorder: 'rgba(255, 255, 255, 0.9)',
+  /** Quiet violet edge for the lower half of a panel. */
+  glassEdge: 'rgba(124, 92, 158, 0.10)',
 
   /** Cocoa. */
-  text: '#3E3226',
-  textMuted: '#7A6E5F',
-  textFaint: '#A79C8B',
+  text: '#3B2E47',
+  textMuted: '#675B79',
+  textFaint: '#867C96',
 
   /** Deep matcha. Buttons, selected states, the wordmark. */
-  primary: '#4E6B4A',
-  primaryPressed: '#3E563A',
+  primary: '#7C5C9E',
+  primaryPressed: '#674C85',
   /** Matcha at roughly 10%. Selected options, pressed outlines. */
-  primarySoft: '#E7EDE1',
-  onPrimary: '#FBFAF3',
+  primarySoft: '#F0E7F8',
+  onPrimary: '#FFFFFF',
 
   /** Lighter sage, for quiet confirmations and the progress indicator. */
-  sage: '#8FA882',
+  sage: '#B79AD0',
 
-  line: '#E4E1D3',
-  lineStrong: '#CFCBB8',
+  line: '#EDE4F3',
+  lineStrong: '#D8CCE3',
 
   /**
    * Honey. Referral and restricted states ONLY — never a heading, never a
    * button, never decoration.
    */
-  attention: '#C4882F',
-  attentionSoft: '#F8EFDB',
+  attention: '#A4683A',
+  attentionSoft: '#FAEFE4',
 
   /** Form validation. Distinct from attention so the two never blur. */
-  danger: '#AF5340',
+  danger: '#B5495F',
 
   // -------------------------------------------------------------------------
   // Compatibility aliases
@@ -70,15 +92,15 @@ export const color = {
   // the next time each screen is edited, because a token called `textOnDark`
   // pointing at cocoa on a cream ground is a lie waiting to mislead someone.
   // -------------------------------------------------------------------------
-  textOnDark: '#3E3226',
-  brand: '#4E6B4A',
-  action: '#4E6B4A',
-  actionPressed: '#3E563A',
-  affirm: '#4E6B4A',
-  affirmPressed: '#3E563A',
-  control: '#FFFDF7',
-  controlPressed: '#E7EDE1',
-  base: '#F5F4EA',
+  textOnDark: '#3B2E47',
+  brand: '#7C5C9E',
+  action: '#7C5C9E',
+  actionPressed: '#674C85',
+  affirm: '#7C5C9E',
+  affirmPressed: '#674C85',
+  control: '#FFFFFF',
+  controlPressed: '#F0E7F8',
+  base: '#F7F2FA',
 } as const;
 
 /**
@@ -119,14 +141,14 @@ export const radius = {
  */
 export const shadow = {
   card: {
-    shadowColor: '#3E3226',
+    shadowColor: '#3B2E47',
     shadowOpacity: 0.07,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 6 },
     elevation: 2,
   },
   lifted: {
-    shadowColor: '#3E3226',
+    shadowColor: '#3B2E47',
     shadowOpacity: 0.12,
     shadowRadius: 28,
     shadowOffset: { width: 0, height: 12 },

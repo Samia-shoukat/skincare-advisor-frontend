@@ -14,12 +14,13 @@ import { RoutineScreen } from './RoutineScreen';
 
 interface Props {
   userId: string;
-  onRetry: () => void;
-  onSignOut: () => void;
+  /** Kept for the caller's API; the routine screen owns its own actions now. */
+  onRetry?: () => void;
+  onSignOut?: () => void;
   fallback: React.ReactElement;
 }
 
-export function OfflineRoutineFallback({ userId, onRetry, onSignOut, fallback }: Props) {
+export function OfflineRoutineFallback({ userId, fallback }: Props) {
   // undefined while reading storage, null when nothing is saved.
   const [saved, setSaved] = useState<SavedRoutine | null | undefined>(undefined);
 
@@ -31,12 +32,6 @@ export function OfflineRoutineFallback({ userId, onRetry, onSignOut, fallback }:
   if (saved === null) return fallback;
 
   return (
-    <RoutineScreen
-      routine={saved.routine}
-      copy={saved.copy}
-      offline
-      onDone={onRetry}
-      onSignOut={onSignOut}
-    />
+    <RoutineScreen routine={saved.routine} copy={saved.copy} offline />
   );
 }

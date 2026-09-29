@@ -32,33 +32,25 @@
  * All copy is from the server string bundle (IF-UI-001).
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 
-import { Body, Button, Card, FormScreen, Heading } from '../components/ui';
-import { api, Referral, StringsBundle } from '../lib/api';
+import { Body, Button, Card, Heading } from '../components/ui';
+import { Screen } from '../components/navigation';
+import { Referral, StringsBundle } from '../lib/api';
 import { color, radius, space, type } from '../lib/theme';
 
 interface Props {
   referral: Referral;
+  /** Passed in rather than fetched: the caller already has it. */
+  copy: StringsBundle;
   onDone: () => void;
-  onAccount?: () => void;
+  /** Absent for a declared referral, which has nowhere to go back to. */
+  onBack?: () => void;
 }
 
-export function ReferralScreen({ referral, onDone, onAccount }: Props) {
-  const [copy, setCopy] = useState<StringsBundle | null>(null);
+export function ReferralScreen({ referral, copy, onDone, onBack }: Props) {
   const [shareError, setShareError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api.getStrings().then(setCopy).catch(() => setCopy(null));
-  }, []);
-
-  if (!copy) {
-    // Nothing rendered until the fixed copy arrives. A referral screen missing
-    // its interim guidance or its "only a dermatologist" line is a screen
-    // FR-TRI-003 does not permit, so a blank moment is the better failure.
-    return <FormScreen>{null}</FormScreen>;
-  }
 
   const shareSummary = async () => {
     setShareError(null);
@@ -76,16 +68,16 @@ export function ReferralScreen({ referral, onDone, onAccount }: Props) {
   const observed = referral.kind === 'OBSERVED' && referral.signals.length > 0;
 
   return (
-    <FormScreen
+    <Screen
+      title={copy.referralScreen.heading}
+      onBack={onBack}
       footer={
         <>
           <Button label={copy.referralScreen.share} onPress={shareSummary} />
           <Button label="Done" tone="outline" onPress={onDone} />
-          {onAccount ? <Button label={copy.account.heading} tone="ghost" onPress={onAccount} /> : null}
         </>
       }
     >
-      <Heading>{copy.referralScreen.heading}</Heading>
 
       {observed ? (
         <>
@@ -128,7 +120,7 @@ export function ReferralScreen({ referral, onDone, onAccount }: Props) {
         </Text>
       </View>
       {shareError ? <Text style={styles.error}>{shareError}</Text> : null}
-    </FormScreen>
+    </Screen>
   );
 }
 

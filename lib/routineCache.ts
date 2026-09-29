@@ -13,6 +13,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { Routine, StringsBundle } from './api';
+import { normaliseBundle } from './copyDefaults';
 
 const key = (userId: string) => `routine:v2:${userId}`;
 
@@ -41,7 +42,11 @@ export async function saveRoutine(
 export async function loadRoutine(userId: string): Promise<SavedRoutine | null> {
   try {
     const raw = await AsyncStorage.getItem(key(userId));
-    return raw ? (JSON.parse(raw) as SavedRoutine) : null;
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as SavedRoutine;
+    // The cached bundle may have been written by an older build, so it gets
+    // the same treatment as a freshly fetched one.
+    return { ...saved, copy: normaliseBundle(saved.copy) };
   } catch {
     return null;
   }

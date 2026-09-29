@@ -1,18 +1,16 @@
 /**
  * Routine screen. FR-REC-001, FR-REC-005, FR-REC-007, FR-ONB-008, FR-SUB-005.
  *
- * Three parts, in the order someone actually reads them:
- *
- *   1. Skin profile   -- skin type and what the scan noticed
- *   2. Morning/Evening -- numbered steps, each with why it is there
- *   3. Per step        -- an affordable product, a premium one, and the
- *                         pharmacy wording for when neither is stocked
+ * Reads top to bottom as: what this routine is, the four care stages it covers,
+ * what the scan noticed, then the steps themselves for one time of day at a
+ * time.
  *
  * ## The disclaimer never scrolls away (FR-REC-007)
  *
  * "The statement remains visible or reachable at any scroll position." It sits
- * in the FormScreen footer, outside the ScrollView, so it is on screen
- * whatever the user has scrolled to.
+ * in the Screen footer, outside the ScrollView, so it is on screen whatever the
+ * user has scrolled to. The Log routine button shares that footer; the
+ * disclaimer sits below it, so the action can never push it off.
  *
  * ## No identifiers on screen
  *
@@ -23,10 +21,17 @@
  * not strings baked into this component.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Body, Button, FormScreen, Heading } from '../components/ui';
+import {
+  CareOverview,
+  GlassCard,
+  PillButton,
+  SectionHeader,
+  StatusPill,
+} from '../components/glass';
+import { Screen, SegmentedControl } from '../components/navigation';
 import { SeverityMeter } from '../components/premium';
 import type { ProductOption, Routine, RoutineStep, StringsBundle } from '../lib/api';
 import { color, radius, space, type } from '../lib/theme';
@@ -46,9 +51,14 @@ interface Props {
   skinType?: string | null;
   /** Shown when the routine came from the offline cache. */
   offline?: boolean;
-  onDone?: () => void;
-  onAccount?: () => void;
-  onSignOut?: () => void;
+  /** Ticks off every step for the selected time of day. Absent when unsupported. */
+  onLogRoutine?: (when: 'am' | 'pm') => void;
+  /** Tab bar wiring, so the routine reads as a tab rather than a dead end. */
+  shell?: {
+    tabs: React.ComponentProps<typeof Screen>['tabs'];
+    activeTab: React.ComponentProps<typeof Screen>['activeTab'];
+    onTabPress: React.ComponentProps<typeof Screen>['onTabPress'];
+  };
 }
 
 export function RoutineScreen({
@@ -56,94 +66,130 @@ export function RoutineScreen({
   copy,
   skinType,
   offline,
-  onDone,
-  onAccount,
-  onSignOut,
+  onLogRoutine,
+  shell,
 }: Props) {
   const c = copy.routineScreen;
+  const nav = copy.nav;
+  // One time of day at a time. The whole routine in a single scroll was the
+  // thing that read as a wall of text.
+  const [when, setWhen] = useState<'am' | 'pm'>('am');
 
-  // Every concern the routine addresses, in the order the steps address them,
-  // without repeats — one concern can be served by two steps.
-  const concerns = Array.from(
-    new Set([...routine.am, ...routine.pm].flatMap((s) => s.concerns)),
-  )
-    .map((id) => c.concernLabels[id])
-    .filter(Boolean);
-
+  const steps = when === 'am' ? routine.am : routine.pm;
   const stepCount = routine.am.length + routine.pm.length;
 
+  // Which of the four stages this routine actually covers. A stage that is
+  // absent is dimmed rather than dropped -- see the note in CareOverview.
+  const present = new Set([...routine.am, ...routine.pm].map((s) => s.step));
+  const careItems = [
+    { glyph: '🧼', label: nav.cleanse, key: 'CLEANSE' as const },
+    { glyph: '✨', label: nav.treat, key: 'TREAT' as const },
+    { glyph: '🌿', label: nav.moisturise, key: 'MOISTURISE' as const },
+    { glyph: '☀️', label: nav.protect, key: 'PROTECT' as const },
+  ].map((item) => ({
+    glyph: item.glyph,
+    label: item.label,
+    // The caption is the first matching step's server label, so this row says
+    // what the routine actually does rather than describing the stage in the
+    // app's own words.
+    caption:
+      [...routine.am, ...routine.pm].find((s) => s.step === item.key)?.label ?? '',
+    present: present.has(item.key),
+  }));
+
   return (
-    <FormScreen
+    <Screen
+      title={c.heading}
+      // FR-REC-007: the disclaimer lives outside the scroll view, so it stays
+      // on screen at any scroll position.
       footer={
         <>
-          {/* FR-REC-007: outside the scroll view, so always visible. */}
-          <Text style={styles.disclaimer}>{copy.routineDisclaimer}</Text>
-          {onDone ? <Button label="Try again" tone="outline" onPress={onDone} /> : null}
-          {onAccount ? (
-            <Button label={copy.account.heading} tone="outline" onPress={onAccount} />
+          {onLogRoutine ? (
+            <PillButton label={nav.logRoutine} onPress={() => onLogRoutine(when)} />
           ) : null}
-          {onSignOut ? <Button label="Sign out" tone="outline" onPress={onSignOut} /> : null}
+          <Text style={styles.disclaimer}>{copy.routineDisclaimer}</Text>
         </>
       }
+      {...(shell ?? {})}
     >
-      <Heading>{c.heading}</Heading>
-
       {offline ? (
         <View style={styles.notice}>
           <Text style={styles.noticeText}>{c.offline}</Text>
         </View>
       ) : null}
 
-      {/* ---- Skin profile ------------------------------------------------ */}
-      <View style={styles.profile}>
-        <Text style={styles.profileHeading}>{c.profileHeading}</Text>
-
-        <View style={styles.profileRow}>
-          <Text style={styles.profileLabel}>{c.skinTypeLabel}</Text>
-          <Text style={styles.profileValue}>
-            {(skinType && c.skinTypeLabels[skinType]) || '—'}
-          </Text>
+      {/* ---- Hero --------------------------------------------------------- */}
+      <GlassCard tone="strong" style={styles.hero}>
+        <View style={styles.heroRow}>
+          <View style={styles.heroText}>
+            <Text style={styles.heroTitle}>{c.heading}</Text>
+            <View style={styles.heroMeta}>
+              {skinType && c.skinTypeLabels[skinType] ? (
+                <StatusPill label={c.skinTypeLabels[skinType]} />
+              ) : null}
+              <StatusPill label={`${stepCount} · ${c.stepsLabel}`} tone="neutral" />
+            </View>
+          </View>
+          <Text style={styles.heroGlyph}>🧴</Text>
         </View>
+      </GlassCard>
 
-        <View style={styles.profileRow}>
-          <Text style={styles.profileLabel}>{c.stepsLabel}</Text>
-          <Text style={styles.profileValue}>{stepCount}</Text>
-        </View>
+      {/* ---- Care overview ------------------------------------------------ */}
+      <View style={styles.block}>
+        <SectionHeader title={nav.careOverview} />
+        <GlassCard>
+          <CareOverview items={careItems} />
+        </GlassCard>
       </View>
 
-      {/* ---- Skin vitals -------------------------------------------------
+      {/* ---- Skin vitals --------------------------------------------------
           Levels the analysis reported, not measurements. There is no hydration
           or barrier number anywhere in this system, so none is shown. */}
       {routine.concerns.length ? (
-        <View style={styles.vitals}>
-          <Text style={styles.profileHeading}>{c.vitalsHeading}</Text>
-          <Text style={styles.vitalsCaption}>{c.vitalsCaption}</Text>
-          {routine.concerns.map((entry) => (
-            <SeverityMeter
-              key={entry.concernId}
-              label={c.concernLabels[entry.concernId] ?? entry.concernId}
-              severity={entry.severity}
-              caption={c.severityLabels[entry.severity]}
-            />
-          ))}
-        </View>
-      ) : concerns.length ? (
-        <View style={styles.profileBlock}>
-          <Text style={styles.profileLabel}>{c.concernsLabel}</Text>
-          <View style={styles.chips}>
-            {concerns.map((label) => (
-              <Text key={label} style={styles.chip}>
-                {label}
-              </Text>
+        <View style={styles.block}>
+          <SectionHeader title={c.vitalsHeading} />
+          <GlassCard>
+            {c.vitalsCaption ? (
+              <Text style={styles.vitalsCaption}>{c.vitalsCaption}</Text>
+            ) : null}
+            {routine.concerns.map((entry) => (
+              <SeverityMeter
+                key={entry.concernId}
+                label={c.concernLabels[entry.concernId] ?? entry.concernId}
+                severity={entry.severity}
+                caption={c.severityLabels[entry.severity]}
+              />
             ))}
-          </View>
+          </GlassCard>
         </View>
       ) : null}
 
-      <Body muted>{c.startSlowly}</Body>
+      {c.startSlowly ? <Text style={styles.guidance}>{c.startSlowly}</Text> : null}
 
-      <Section icon="☀️" title={c.morning} steps={routine.am} copy={copy} />
-      <Section icon="🌙" title={c.evening} steps={routine.pm} copy={copy} />
+      {/* ---- Steps -------------------------------------------------------- */}
+      <View style={styles.toggle}>
+        <SegmentedControl
+          options={[
+            { key: 'am' as const, label: `☀️  ${c.morning}` },
+            { key: 'pm' as const, label: `🌙  ${c.evening}` },
+          ]}
+          value={when}
+          onChange={setWhen}
+        />
+      </View>
+
+      {steps.length > 0 ? (
+        <View style={styles.section}>
+          {steps.map((step, index) => (
+            <StepCard
+              key={`${step.ruleId}-${index}`}
+              step={step}
+              number={index + 1}
+              copy={copy}
+            />
+          ))}
+        </View>
+      ) : null}
 
       {routine.omitted.length > 0 ? (
         <View style={styles.notice}>
@@ -153,32 +199,7 @@ export function RoutineScreen({
 
       {/* FR-ONB-008. Unsubstantiated wording unless a signed review exists. */}
       <Text style={styles.claim}>{copy.reviewClaim}</Text>
-    </FormScreen>
-  );
-}
-
-function Section({
-  icon,
-  title,
-  steps,
-  copy,
-}: {
-  icon: string;
-  title: string;
-  steps: RoutineStep[];
-  copy: StringsBundle;
-}) {
-  if (steps.length === 0) return null;
-
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>
-        {icon}  {title}
-      </Text>
-      {steps.map((step, index) => (
-        <StepCard key={`${step.ruleId}-${index}`} step={step} number={index + 1} copy={copy} />
-      ))}
-    </View>
+    </Screen>
   );
 }
 
@@ -197,7 +218,7 @@ function StepCard({
   const concerns = step.concerns.map((id) => c.concernLabels[id]).filter(Boolean);
 
   return (
-    <View style={styles.card}>
+    <GlassCard>
       <View style={styles.cardHead}>
         <Text style={styles.stepNumber}>{number}</Text>
         <View style={styles.cardHeadText}>
@@ -210,11 +231,9 @@ function StepCard({
       </View>
 
       <View style={styles.metaRow}>
-        {frequency ? <Text style={styles.metaPill}>{frequency}</Text> : null}
+        {frequency ? <StatusPill label={frequency} tone="neutral" /> : null}
         {concerns.map((label) => (
-          <Text key={label} style={styles.metaPillSoft}>
-            {label}
-          </Text>
+          <StatusPill key={label} label={label} />
         ))}
       </View>
 
@@ -230,7 +249,7 @@ function StepCard({
           <Text style={styles.generic}>{step.products.generic}</Text>
         </View>
       </View>
-    </View>
+    </GlassCard>
   );
 }
 
@@ -254,52 +273,21 @@ function Option({
 }
 
 const styles = StyleSheet.create({
-  // --- profile card ---
-  profile: {
-    backgroundColor: color.surface,
-    borderRadius: radius.card,
-    padding: space.lg,
-    marginTop: space.lg,
-    marginBottom: space.md,
-    gap: space.sm,
-    borderWidth: 1,
-    borderColor: color.line,
-  },
-  profileHeading: { ...type.title, color: color.text, marginBottom: space.xs },
-  vitals: {
-    backgroundColor: color.surface,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: color.line,
-    padding: space.lg,
-    marginBottom: space.md,
-  },
-  vitalsCaption: { ...type.small, color: color.textMuted },
-  profileRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  profileBlock: { gap: space.xs },
-  profileLabel: { ...type.small, color: color.textMuted },
-  profileValue: { ...type.bodyStrong, color: color.text },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.xs },
-  chip: {
-    ...type.small,
-    color: color.primary,
-    backgroundColor: color.primarySoft,
-    borderRadius: radius.pill,
-    paddingVertical: 3,
-    paddingHorizontal: space.sm,
-    overflow: 'hidden',
-  },
+  // --- hero ---
+  hero: { marginTop: space.sm },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  heroText: { flex: 1, gap: space.sm },
+  heroTitle: { ...type.display, fontSize: 24, lineHeight: 31, color: color.text },
+  heroMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
+  heroGlyph: { fontSize: 46 },
+
+  block: { marginTop: space.xl },
+  vitalsCaption: { ...type.small, color: color.textMuted, marginBottom: space.sm },
+  guidance: { ...type.body, color: color.textMuted, marginTop: space.lg },
 
   // --- sections and step cards ---
-  section: { marginTop: space.xl, gap: space.md },
-  sectionTitle: { ...type.title, color: color.text },
-  card: {
-    backgroundColor: color.surface,
-    borderRadius: radius.card,
-    padding: space.lg,
-    borderWidth: 1,
-    borderColor: color.line,
-  },
+  toggle: { marginTop: space.lg },
+  section: { marginTop: space.md, gap: space.md },
   cardHead: { flexDirection: 'row', gap: space.md },
   cardHeadText: { flex: 1, gap: 2 },
   stepNumber: {
@@ -317,30 +305,11 @@ const styles = StyleSheet.create({
   purpose: { ...type.small, color: color.textMuted },
 
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.md },
-  metaPill: {
-    ...type.small,
-    color: color.text,
-    backgroundColor: color.surfaceRaised,
-    borderRadius: radius.pill,
-    paddingVertical: 3,
-    paddingHorizontal: space.sm,
-    overflow: 'hidden',
-  },
-  metaPillSoft: {
-    ...type.small,
-    color: color.textMuted,
-    borderColor: color.line,
-    borderWidth: 1,
-    borderRadius: radius.pill,
-    paddingVertical: 3,
-    paddingHorizontal: space.sm,
-    overflow: 'hidden',
-  },
 
   // --- product options ---
   options: { marginTop: space.md, gap: space.sm },
   option: {
-    backgroundColor: color.surfaceRaised,
+    backgroundColor: color.surface,
     borderRadius: radius.field,
     padding: space.md,
     gap: 2,
@@ -369,6 +338,6 @@ const styles = StyleSheet.create({
     marginTop: space.lg,
   },
   noticeText: { ...type.body, color: color.text },
-  claim: { ...type.small, color: color.textFaint, marginTop: space.xl },
+  claim: { ...type.small, color: color.textFaint, marginTop: space.xl, textAlign: 'center' },
   disclaimer: { ...type.small, color: color.textMuted, textAlign: 'center' },
 });
