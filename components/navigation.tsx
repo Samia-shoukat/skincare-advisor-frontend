@@ -216,7 +216,8 @@ export function SegmentedControl<T extends string>({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  scrollBody: { paddingHorizontal: space.lg, paddingBottom: space.xl },
+  // 20, not the 24 of the spacing scale: measured from the approved design.
+  scrollBody: { paddingHorizontal: 20, paddingBottom: space.xl },
   // Clears the floating bar, which is not in the scroll flow.
   scrollBodyWithTabs: { paddingBottom: 104 },
   plainBody: { flex: 1 },
@@ -224,17 +225,24 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: space.lg,
-    paddingTop: space.sm,
-    paddingBottom: space.sm,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 8,
     gap: space.sm,
   },
-  slot: { width: 42 },
-  headerTitle: { ...type.title, color: color.text, flex: 1, textAlign: 'center' },
-  headerRight: { minWidth: 42, alignItems: 'flex-end' },
+  slot: { width: 38 },
+  headerTitle: {
+    ...type.title,
+    fontSize: 19,
+    lineHeight: 25,
+    color: color.text,
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerRight: { minWidth: 38, alignItems: 'flex-end' },
 
   footer: {
-    paddingHorizontal: space.lg,
+    paddingHorizontal: 20,
     paddingTop: space.md,
     paddingBottom: space.sm,
     gap: space.sm,
@@ -244,26 +252,26 @@ const styles = StyleSheet.create({
 
   tabBar: {
     position: 'absolute',
-    left: space.lg,
-    right: space.lg,
-    bottom: space.md,
+    left: 18,
+    right: 18,
+    bottom: 14,
     flexDirection: 'row',
     backgroundColor: color.glassStrong,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: color.glassBorder,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.xs,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
-  tab: { flex: 1, alignItems: 'center', gap: 2 },
+  tab: { flex: 1, alignItems: 'center' },
   tabIconWrap: {
-    paddingHorizontal: space.md,
+    paddingHorizontal: 14,
     paddingVertical: 4,
     borderRadius: radius.pill,
   },
   tabIconWrapActive: { backgroundColor: color.primarySoft },
-  tabIcon: { fontSize: 17 },
-  tabLabel: { ...type.small, fontSize: 11, lineHeight: 15, color: color.textMuted },
+  tabIcon: { fontSize: 16 },
+  tabLabel: { ...type.small, fontSize: 10.5, lineHeight: 14, color: color.textMuted, marginTop: 2 },
   tabLabelActive: { color: color.primary, fontWeight: '600' },
 
   segment: {
@@ -278,11 +286,11 @@ const styles = StyleSheet.create({
   segmentOption: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: space.sm,
-    paddingHorizontal: space.xs,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     borderRadius: radius.pill,
   },
   segmentOptionActive: { backgroundColor: color.surface, ...shadow.card },
-  segmentLabel: { ...type.small, fontWeight: '600', color: color.textMuted },
+  segmentLabel: { ...type.small, fontSize: 13, lineHeight: 18, fontWeight: '600', color: color.textMuted },
   segmentLabelActive: { color: color.primary },
 });

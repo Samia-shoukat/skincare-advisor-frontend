@@ -131,9 +131,9 @@ export function TodayScreen({ routine, copy, ticks, onToggle, shell }: Props) {
 }
 
 const styles = StyleSheet.create({
-  filters: { marginTop: space.sm, marginBottom: space.lg },
-  list: { gap: space.sm },
-  emptyText: { ...type.body, color: color.textMuted, textAlign: 'center' },
-  guide: { marginTop: space.xl },
-  claim: { ...type.small, color: color.textFaint, marginTop: space.xl, textAlign: 'center' },
+  filters: { marginTop: 8, marginBottom: 20 },
+  list: { gap: 9 },
+  emptyText: { ...type.body, fontSize: 15, lineHeight: 22, color: color.textMuted, textAlign: 'center' },
+  guide: { marginTop: 28 },
+  claim: { ...type.small, fontSize: 11.5, lineHeight: 16, color: color.textFaint, marginTop: 26, textAlign: 'center' },
 });

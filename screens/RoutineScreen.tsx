@@ -164,8 +164,6 @@ export function RoutineScreen({
         </View>
       ) : null}
 
-      {c.startSlowly ? <Text style={styles.guidance}>{c.startSlowly}</Text> : null}
-
       {/* ---- Steps -------------------------------------------------------- */}
       <View style={styles.toggle}>
         <SegmentedControl
@@ -274,59 +272,60 @@ function Option({
 
 const styles = StyleSheet.create({
   // --- hero ---
-  hero: { marginTop: space.sm },
-  heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  heroText: { flex: 1, gap: space.sm },
-  heroTitle: { ...type.display, fontSize: 24, lineHeight: 31, color: color.text },
-  heroMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
-  heroGlyph: { fontSize: 46 },
+  hero: { marginTop: 4 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  heroText: { flex: 1 },
+  heroTitle: { ...type.display, fontSize: 22, lineHeight: 29, color: color.text, marginBottom: 9 },
+  heroMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  heroGlyph: { fontSize: 42 },
 
-  block: { marginTop: space.xl },
-  vitalsCaption: { ...type.small, color: color.textMuted, marginBottom: space.sm },
-  guidance: { ...type.body, color: color.textMuted, marginTop: space.lg },
+  block: { marginTop: 26 },
+  vitalsCaption: { ...type.small, fontSize: 12.5, lineHeight: 17, color: color.textMuted, marginBottom: 8 },
 
   // --- sections and step cards ---
-  toggle: { marginTop: space.lg },
-  section: { marginTop: space.md, gap: space.md },
-  cardHead: { flexDirection: 'row', gap: space.md },
-  cardHeadText: { flex: 1, gap: 2 },
+  toggle: { marginTop: 22 },
+  section: { marginTop: 12, gap: 12 },
+  cardHead: { flexDirection: 'row', gap: 13 },
+  cardHeadText: { flex: 1 },
   stepNumber: {
     ...type.bodyStrong,
+    fontSize: 14,
     color: color.onPrimary,
     backgroundColor: color.primary,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     textAlign: 'center',
-    lineHeight: 28,
+    lineHeight: 26,
     overflow: 'hidden',
   },
-  stepTitle: { ...type.bodyStrong, color: color.text },
-  purpose: { ...type.small, color: color.textMuted },
+  stepTitle: { ...type.bodyStrong, fontSize: 15, lineHeight: 20, color: color.text },
+  purpose: { ...type.small, fontSize: 12.5, lineHeight: 17, color: color.textMuted, marginTop: 2 },
 
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.md },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
 
   // --- product options ---
-  options: { marginTop: space.md, gap: space.sm },
+  options: { marginTop: 8, gap: 8 },
   option: {
     backgroundColor: color.surface,
-    borderRadius: radius.field,
-    padding: space.md,
-    gap: 2,
+    borderRadius: 15,
+    padding: 12,
   },
   optionHighlight: { backgroundColor: color.primarySoft },
-  tier: { ...type.small, color: color.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
+  tier: { ...type.small, fontSize: 11, lineHeight: 15, color: color.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
   tierHighlight: { color: color.primary },
-  productName: { ...type.body, color: color.text },
-  brand: { ...type.bodyStrong, color: color.text },
-  genericRow: { paddingHorizontal: space.md, paddingTop: space.xs, gap: 2 },
+  productName: { ...type.body, fontSize: 14, lineHeight: 19, color: color.text, marginTop: 2 },
+  brand: { ...type.bodyStrong, fontSize: 14, color: color.text },
+  genericRow: { paddingHorizontal: 12, paddingTop: 4 },
   genericLabel: {
     ...type.small,
+    fontSize: 11,
+    lineHeight: 15,
     color: color.textFaint,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
-  generic: { ...type.small, color: color.textMuted },
+  generic: { ...type.small, fontSize: 12.5, lineHeight: 17, color: color.textMuted, marginTop: 2 },
 
   // --- notices ---
   notice: {
@@ -335,9 +334,9 @@ const styles = StyleSheet.create({
     borderLeftColor: color.attention,
     borderRadius: radius.field,
     padding: space.md,
-    marginTop: space.lg,
+    marginTop: 20,
   },
-  noticeText: { ...type.body, color: color.text },
-  claim: { ...type.small, color: color.textFaint, marginTop: space.xl, textAlign: 'center' },
-  disclaimer: { ...type.small, color: color.textMuted, textAlign: 'center' },
+  noticeText: { ...type.body, fontSize: 15, lineHeight: 22, color: color.text },
+  claim: { ...type.small, fontSize: 11.5, lineHeight: 16, color: color.textFaint, marginTop: 26, textAlign: 'center' },
+  disclaimer: { ...type.small, fontSize: 11.5, lineHeight: 17, color: color.textMuted, textAlign: 'center' },
 });

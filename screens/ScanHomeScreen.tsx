@@ -439,12 +439,12 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
 
 const styles = StyleSheet.create({
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: color.ground },
-  header: { marginTop: space.xs },
-  greeting: { ...type.display, color: color.text },
-  status: { ...type.small, color: color.textMuted, marginTop: space.xs },
-  strip: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.md },
-  block: { marginTop: space.xl },
-  emptyTitle: { ...type.bodyStrong, color: color.text, marginBottom: space.xs },
-  emptyBody: { ...type.body, color: color.textMuted },
-  claim: { ...type.small, color: color.textFaint, marginTop: space.xl, textAlign: 'center' },
+  header: { marginTop: 4 },
+  greeting: { ...type.display, fontSize: 27, lineHeight: 33, color: color.text },
+  status: { ...type.small, fontSize: 13, lineHeight: 18, color: color.textMuted, marginTop: 6 },
+  strip: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 14 },
+  block: { marginTop: 26 },
+  emptyTitle: { ...type.bodyStrong, fontSize: 15, lineHeight: 20, color: color.text, marginBottom: 4 },
+  emptyBody: { ...type.body, fontSize: 15, lineHeight: 22, color: color.textMuted },
+  claim: { ...type.small, fontSize: 11.5, lineHeight: 16, color: color.textFaint, marginTop: 26, textAlign: 'center' },
 });
