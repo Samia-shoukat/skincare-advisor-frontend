@@ -61,13 +61,21 @@ export interface SignUpResult {
   needsEmailConfirmation: boolean;
 }
 
+/**
+ * `fullName` goes into Supabase's user metadata -- the same field Google
+ * sign-in fills -- and nowhere else. It is for the greeting only; our backend
+ * never sees it (see lib/displayName.ts).
+ */
 export async function registerWithPassword(
   email: string,
   password: string,
+  fullName?: string,
 ): Promise<SignUpResult> {
+  const name = fullName?.trim();
   const { data, error } = await supabase.auth.signUp({
     email: email.trim().toLowerCase(),
     password,
+    options: name ? { data: { full_name: name } } : undefined,
   });
   if (error) throw error;
   return { needsEmailConfirmation: data.session === null };

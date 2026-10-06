@@ -1,17 +1,21 @@
 /**
  * Design tokens — Skinsight.
  *
- * Soft lilac and blush: a pale violet ground, plum for text, muted violet for
- * action.
+ * Porcelain and plum: a near-neutral ground, plum for text, a deep violet
+ * accent for the one thing on each screen worth pressing.
  *
- * Pastel is the easy part; contrast is the part that usually breaks. Plum text
- * on pale lilac clears WCAG AA comfortably, and the violet used for buttons is
- * dark enough to carry white label text -- a prettier, lighter violet would
- * fail both and is the reason most pastel apps end up unreadable in sunlight
- * (IF-UI-003).
+ * The ground used to be a saturated blush-and-lilac wash. It read as pretty in
+ * isolation and as busy once every card sat on it, and it left the accent
+ * nowhere to stand out. A neutral ground with a single strong accent is the
+ * vernacular of premium health apps for a reason: the eye goes where the
+ * colour is, so the colour can be spent on purpose.
+ *
+ * Contrast is the part that usually breaks. Plum text on porcelain clears WCAG
+ * AA comfortably, and the violet used for buttons is dark enough to carry white
+ * label text (IF-UI-003).
  *
  * Shadows, not borders, do the separating. The shadow is plum-tinted rather
- * than black, because a black shadow over lilac turns grey and kills the wash.
+ * than black, because a black shadow on a warm neutral turns grey and dead.
  *
  * One discipline holds: `attention` is the only warm colour in ordinary use,
  * and it appears on exactly two screens -- the referral result and a restricted
@@ -20,14 +24,13 @@
 
 export const color = {
   /**
-   * Page wash, top to bottom: blush → lilac → blush. Warmer and a touch more
-   * saturated than a near-white wash, because the glass surfaces below are
-   * translucent — they have nothing to show through them unless the ground
-   * carries actual colour.
+   * Page wash, top to bottom: porcelain → a breath of mauve → linen. Close
+   * enough to neutral that it never competes with the accent, warm enough
+   * that white cards still lift off it.
    */
-  gradient: ['#FBE7F0', '#EFE4F8', '#F7E7F0'] as const,
+  gradient: ['#F8F4F2', '#F3EEF3', '#F7F3EF'] as const,
 
-  ground: '#F5EAF5',
+  ground: '#F6F2F1',
   /** Cards. Warm white — pure white on cream reads cold and slightly blue. */
   surface: '#FFFFFF',
   surfaceRaised: '#F8F3FC',
@@ -46,12 +49,16 @@ export const color = {
   // Opacity is deliberately high. Glass at 25% looks better in a mockup and
   // fails in sunlight, which is where this app gets used (IF-UI-003).
   // ---------------------------------------------------------------------
+  //
+  // Over a near-neutral ground the fill has to be denser than it was over the
+  // old coloured wash, or a card and the page behind it become the same
+  // colour and only the shadow is left to separate them.
   /** Standard glass panel. */
-  glass: 'rgba(255, 255, 255, 0.62)',
+  glass: 'rgba(255, 255, 255, 0.78)',
   /** For panels carrying body text, where legibility outranks the effect. */
-  glassStrong: 'rgba(255, 255, 255, 0.82)',
+  glassStrong: 'rgba(255, 255, 255, 0.92)',
   /** The lit edge. This, not the fill, is what reads as "glass". */
-  glassBorder: 'rgba(255, 255, 255, 0.9)',
+  glassBorder: 'rgba(255, 255, 255, 0.95)',
   /** Quiet violet edge for the lower half of a panel. */
   glassEdge: 'rgba(124, 92, 158, 0.10)',
 
@@ -60,12 +67,26 @@ export const color = {
   textMuted: '#675B79',
   textFaint: '#867C96',
 
-  /** Deep matcha. Buttons, selected states, the wordmark. */
+  /** Violet. Buttons, selected states, the wordmark. */
   primary: '#7C5C9E',
   primaryPressed: '#674C85',
-  /** Matcha at roughly 10%. Selected options, pressed outlines. */
+  /** Violet at roughly 10%. Selected options, pressed outlines. */
   primarySoft: '#F0E7F8',
   onPrimary: '#FFFFFF',
+  /** Plum. The evening routine, the avatar, anywhere the accent goes dark. */
+  primaryDeep: '#3F2D55',
+
+  /**
+   * The hero action: violet into plum. Used for the one control on a screen
+   * that the screen exists for (Home's "My Routine"), never for decoration.
+   */
+  accentGradient: ['#8F70B6', '#5F4482'] as const,
+  /** Evening, as a surface: the same plum family, lit from the top. */
+  eveningGradient: ['#3F2D55', '#6A4E8B'] as const,
+  /** Morning, as a surface: white warming into the faintest violet. */
+  morningGradient: ['#FFFFFF', '#F4EDFA'] as const,
+  /** Home's hero panel: soft mauve to blush to white. */
+  heroGradient: ['#EFE4F7', '#F9ECF1', '#FFFFFF'] as const,
 
   /** Lighter sage, for quiet confirmations and the progress indicator. */
   sage: '#B79AD0',

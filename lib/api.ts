@@ -165,6 +165,13 @@ export interface StringsBundle {
     treat: string;
     moisturise: string;
     protect: string;
+    detectedIssues: string;
+    morningRoutine: string;
+    eveningRoutine: string;
+    markDone: string;
+    routineCtaSubtitle: string;
+    dailyNoteLabel: string;
+    stepsDoneToday: string;
   };
   /** FR-ONB-007. The limitations statement version to send back on consent. */
   consentVersion: string;
@@ -230,6 +237,11 @@ export interface StringsBundle {
     routineTile: string;
     accountTile: string;
     noRoutine: string;
+    /**
+     * One line shown on Home each day, picked by date. Mindset lines about the
+     * routine, never about what a product does -- see copyDefaults.ts.
+     */
+    dailyNotes: string[];
   };
   referralScreen: {
     heading: string;

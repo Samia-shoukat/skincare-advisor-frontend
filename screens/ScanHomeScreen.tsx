@@ -1,10 +1,10 @@
 /**
  * The signed-in area: four tabs and two full-screen sub-screens.
  *
- *   Home     -- greeting, the scan action, a shelf of today's routine
+ *   Home     -- greeting, skin type, the day's note, the "My Routine" CTA
  *   Routine  -- the saved routine, or a prompt to scan
  *   Today    -- the routine as a checklist
- *   Profile  -- privacy, terms, support, sign out, delete
+ *   Profile  -- skin profile, favourites, settings, support, sign out
  *
  * Capture and referral take over the whole screen and carry a back arrow, so
  * there is always one obvious way out.
@@ -18,24 +18,18 @@
  *
  * Offline, the routine tab shows the copy saved on the phone (SRS 2.4).
  *
- * ## Tick state lives here
+ * ## Tick and favourite state live here
  *
- * The Today tab is a view over it, and Home shows the next outstanding step, so
- * the set belongs above both rather than inside either. It is device-local and
- * never uploaded -- see lib/routineLog.ts.
+ * The Routine tab writes ticks ("Mark done") and the Today tab reads them, so
+ * the set belongs above both rather than inside either. Favourites are the same
+ * shape: hearted on Routine, listed on Profile. Both are device-local and never
+ * uploaded -- see lib/routineLog.ts and lib/favorites.ts.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-import {
-  GlassCard,
-  IconButton,
-  SectionHeader,
-  Shelf,
-  ShelfCard,
-  StatusPill,
-} from '../components/glass';
+import { GlassCard } from '../components/glass';
 import { ActionTile } from '../components/premium';
 import { Screen, TabDefinition, TabKey } from '../components/navigation';
 import { Body, Button, Heading } from '../components/ui';
@@ -44,17 +38,19 @@ import {
   ApiError,
   Eligibility,
   Profile,
+  ProductOption,
   Referral,
   Routine,
-  RoutineStep,
   StringsBundle,
 } from '../lib/api';
+import { clearFavorites, Favorite, loadFavorites, saveFavorites } from '../lib/favorites';
 import { clearRoutine, loadRoutine, saveRoutine } from '../lib/routineCache';
 import { clearRoutineLog, loadTicks, saveTicks, stepId } from '../lib/routineLog';
 import { color, space, type } from '../lib/theme';
 import { useBackHandler } from '../lib/useBackHandler';
 import { AccountScreen } from './AccountScreen';
 import { CaptureScreen } from './CaptureScreen';
+import { HomeScreen } from './HomeScreen';
 import { ReferralScreen } from './ReferralScreen';
 import { RoutineScreen } from './RoutineScreen';
 import { TodayScreen } from './TodayScreen';
@@ -62,21 +58,16 @@ import { TodayScreen } from './TodayScreen';
 /** A sub-screen covers the tabs; null means a tab is showing. */
 type Overlay = { name: 'capture' } | { name: 'referral'; referral: Referral } | null;
 
-/** Decorative. Every card carries the server's label beside it. */
-const STEP_GLYPH: Record<RoutineStep['step'], string> = {
-  CLEANSE: '🧼',
-  TREAT: '✨',
-  MOISTURISE: '🌿',
-  PROTECT: '☀️',
-};
-
 interface Props {
   token: string;
   userId: string;
+  /** For the greeting and the profile header. From Supabase, not our backend. */
+  name: string | null;
+  email: string | null;
   onSignOut: () => void;
 }
 
-export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
+export function ScanHomeScreen({ token, userId, name, email, onSignOut }: Props) {
   const [copy, setCopy] = useState<StringsBundle | null>(null);
   const [eligibility, setEligibility] = useState<Eligibility | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -86,6 +77,7 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [error, setError] = useState<string | null>(null);
   const [ticks, setTicks] = useState<Set<string>>(new Set());
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
 
   // Android back: leave a sub-screen, or return to Home from another tab. On
   // Home it returns false, so back leaves the app as users expect.
@@ -107,8 +99,33 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
     // DR-002: nothing of this account stays on the phone.
     await clearRoutine(userId);
     await clearRoutineLog(userId);
+    await clearFavorites(userId);
     onSignOut();
   }, [userId, onSignOut]);
+
+  const toggleFavorite = useCallback(
+    (product: ProductOption, stepLabel: string) => {
+      setFavorites((previous) => {
+        const next = previous.some((item) => item.id === product.id)
+          ? previous.filter((item) => item.id !== product.id)
+          : [...previous, { ...product, stepLabel }];
+        void saveFavorites(userId, next);
+        return next;
+      });
+    },
+    [userId],
+  );
+
+  const removeFavorite = useCallback(
+    (productId: string) => {
+      setFavorites((previous) => {
+        const next = previous.filter((item) => item.id !== productId);
+        void saveFavorites(userId, next);
+        return next;
+      });
+    },
+    [userId],
+  );
 
   const toggleTick = useCallback(
     (id: string) => {
@@ -190,6 +207,7 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
 
   useEffect(() => {
     loadTicks(userId).then(setTicks);
+    loadFavorites(userId).then(setFavorites);
   }, [userId]);
 
   // ---- error and loading -------------------------------------------------
@@ -266,10 +284,10 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
 
   const nav = copy.nav;
   const tabs: TabDefinition[] = [
-    { key: 'home', icon: '🏠', label: nav.home },
-    { key: 'routine', icon: '🧴', label: nav.routine },
-    { key: 'today', icon: '🗓', label: nav.today },
-    { key: 'account', icon: '🤍', label: nav.profile },
+    { key: 'home', icon: 'home', label: nav.home },
+    { key: 'routine', icon: 'layers', label: nav.routine },
+    { key: 'today', icon: 'calendar', label: nav.today },
+    { key: 'account', icon: 'user', label: nav.profile },
   ];
   const shell = { tabs, activeTab: tab, onTabPress: setTab };
 
@@ -279,8 +297,16 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
         token={token}
         userId={userId}
         copy={copy}
+        name={name}
+        email={email}
+        skinType={profile?.skinType ?? null}
+        scansRemaining={eligibility?.scansRemaining ?? null}
+        routine={routine}
+        favorites={favorites}
+        onRemoveFavorite={removeFavorite}
         onBack={() => setTab('home')}
-        onSignOut={onSignOut}
+        // The full sign-out, so favourites and today's ticks go too (DR-002).
+        onSignOut={signOut}
         shell={shell}
       />
     );
@@ -326,6 +352,8 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
         skinType={profile?.skinType ?? null}
         offline={offline}
         onLogRoutine={logRoutine}
+        favoriteIds={new Set(favorites.map((item) => item.id))}
+        onToggleFavorite={toggleFavorite}
         shell={shell}
       />
     );
@@ -333,118 +361,24 @@ export function ScanHomeScreen({ token, userId, onSignOut }: Props) {
 
   // ---- home --------------------------------------------------------------
 
-  const blocked = !eligibility?.canScan;
-  const blockedReason =
-    eligibility?.reason === 'QUOTA_EXHAUSTED' ? copy.quotaExhausted : copy.scanBlockedSupport;
-
-  // The whole routine as a flat list, so Home can show what is still
-  // outstanding without duplicating the Today tab's filtering.
-  const allSteps = routine
-    ? [
-        ...routine.am.map((step, i) => ({ id: stepId('am', i, step.ruleId), step })),
-        ...routine.pm.map((step, i) => ({ id: stepId('pm', i, step.ruleId), step })),
-      ]
-    : [];
-  const outstanding = allSteps.filter((entry) => !ticks.has(entry.id));
-
   return (
-    <Screen
-      // The reference has a notification bell here. There are no
-      // notifications in this app -- nothing schedules one, nothing would fire
-      // -- and a bell that opens something unrelated teaches the wrong thing
-      // about what the icon means. The slot goes to the account instead, which
-      // is what a circular control in that corner usually is.
-      headerRight={<IconButton glyph="👤" label={nav.profile} onPress={() => setTab('account')} />}
-      {...shell}
-    >
-      <View style={styles.header}>
-        <Text style={styles.greeting}>{copy.home.greeting}</Text>
-        {copy.home.status ? <Text style={styles.status}>{copy.home.status}</Text> : null}
-      </View>
-
-      <View style={styles.strip}>
-        {profile?.skinType && copy.routineScreen.skinTypeLabels[profile.skinType] ? (
-          <StatusPill label={copy.routineScreen.skinTypeLabels[profile.skinType]} />
-        ) : null}
-        {eligibility ? (
-          <StatusPill
-            tone="neutral"
-            label={`${eligibility.scansRemaining} ${
-              eligibility.scansRemaining === 1 ? 'scan left' : 'scans left'
-            }`}
-          />
-        ) : null}
-      </View>
-
-      {/* ---- the scan action ---------------------------------------------- */}
-      <View style={styles.block}>
-        {blocked ? (
-          <GlassCard tone="strong">
-            <Text style={styles.emptyTitle}>{copy.scan.readyHeading}</Text>
-            <Text style={styles.emptyBody}>{blockedReason}</Text>
-          </GlassCard>
-        ) : (
-          <ActionTile
-            icon="🫧"
-            title={copy.home.scanTitle}
-            subtitle={copy.home.scanSubtitle}
-            onPress={() => setOverlay({ name: 'capture' })}
-          />
-        )}
-      </View>
-
-      {/* ---- the routine, as a shelf -------------------------------------- */}
-      {allSteps.length > 0 ? (
-        <View style={styles.block}>
-          <SectionHeader
-            title={nav.myRoutine}
-            actionLabel={nav.seeAll}
-            onAction={() => setTab('routine')}
-          />
-          <Shelf>
-            {allSteps.map((entry) => (
-              <ShelfCard
-                key={entry.id}
-                glyph={STEP_GLYPH[entry.step.step]}
-                title={entry.step.label}
-                status={copy.routineScreen.frequencyLabels[entry.step.frequency]}
-                tone={ticks.has(entry.id) ? 'neutral' : 'calm'}
-                onPress={() => setTab('routine')}
-              />
-            ))}
-          </Shelf>
-        </View>
-      ) : null}
-
-      {/* ---- what is left today ------------------------------------------- */}
-      {allSteps.length > 0 ? (
-        <View style={styles.block}>
-          <SectionHeader
-            title={nav.todayHeading}
-            actionLabel={nav.seeAll}
-            onAction={() => setTab('today')}
-          />
-          <GlassCard tone="strong">
-            <Text style={styles.emptyBody}>
-              {outstanding.length === 0 ? nav.allDone : outstanding[0].step.label}
-            </Text>
-          </GlassCard>
-        </View>
-      ) : null}
-
-      <Text style={styles.claim}>{copy.reviewClaim}</Text>
-    </Screen>
+    <HomeScreen
+      copy={copy}
+      name={name}
+      skinType={profile?.skinType ?? null}
+      eligibility={eligibility}
+      hasRoutine={!!routine}
+      onOpenRoutine={() => setTab('routine')}
+      onOpenProfile={() => setTab('account')}
+      onScan={() => setOverlay({ name: 'capture' })}
+      shell={shell}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: color.ground },
-  header: { marginTop: 4 },
-  greeting: { ...type.display, fontSize: 27, lineHeight: 33, color: color.text },
-  status: { ...type.small, fontSize: 13, lineHeight: 18, color: color.textMuted, marginTop: 6 },
-  strip: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 14 },
   block: { marginTop: 26 },
   emptyTitle: { ...type.bodyStrong, fontSize: 15, lineHeight: 20, color: color.text, marginBottom: 4 },
   emptyBody: { ...type.body, fontSize: 15, lineHeight: 22, color: color.textMuted },
-  claim: { ...type.small, fontSize: 11.5, lineHeight: 16, color: color.textFaint, marginTop: 26, textAlign: 'center' },
 });

@@ -33,14 +33,26 @@ const SAMPLE_STEP = 8;
 /**
  * Whether this build has native frame processors compiled in.
  *
- * False in builds made with `VisionCamera_disableFrameProcessors=true` (see
- * android/gradle.properties). Passing a frameProcessor to <Camera> in such a
- * build throws at runtime, so callers must check this first. The post-capture
- * gate is unaffected -- it is the path that actually works on this hardware
- * (ADR-014).
+ * Opt-IN, not opt-out. The Android build sets
+ * `VisionCamera_enableFrameProcessors=false` (android/gradle.properties),
+ * because compiling them needs more memory than the build machine has. So the
+ * common case is that they are absent, and the default has to match that.
+ *
+ * This was the other way round and defaulted to true, which meant a build with
+ * no flag set attached a frame processor to a <Camera> whose native library had
+ * none. vision-camera throws on that, natively, and the app closed the instant
+ * the capture screen opened -- no JS error, no red box, just gone.
+ *
+ * Turn it on with `EXPO_PUBLIC_FRAME_PROCESSORS=on`, and only in a build whose
+ * gradle.properties actually enables them. The two settings have to agree, and
+ * nothing checks that for you at build time.
+ *
+ * Losing the live gate costs nothing essential: CaptureScreen treats absent
+ * metrics as `liveGateUnavailable` and runs the same quality checks after the
+ * shutter instead (ADR-014).
  */
 export const FRAME_PROCESSORS_ENABLED =
-  process.env.EXPO_PUBLIC_FRAME_PROCESSORS !== 'off';
+  process.env.EXPO_PUBLIC_FRAME_PROCESSORS === 'on';
 
 export interface FrameSampleResult {
   metrics: FrameMetrics;

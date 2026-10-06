@@ -50,6 +50,7 @@ export function AuthFormScreen({
 }) {
   const isRegister = mode === 'register';
 
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -77,7 +78,7 @@ export function AuthFormScreen({
     setError(null);
     try {
       if (isRegister) {
-        const { needsEmailConfirmation } = await registerWithPassword(email, password);
+        const { needsEmailConfirmation } = await registerWithPassword(email, password, fullName);
         if (needsEmailConfirmation) {
           // Supabase created the account but issued no session. Without this
           // branch the app would sit on a spinner waiting for a session that
@@ -134,6 +135,22 @@ export function AuthFormScreen({
       </Body>
 
       <View style={styles.form}>
+        {/* Optional: only the greeting uses it. Leaving it blank is fine --
+            Home falls back to a name read from the email address. */}
+        {isRegister ? (
+          <TextField
+            label="Your name"
+            value={fullName}
+            onChangeText={setFullName}
+            placeholder="e.g. Samia Shoukat"
+            hint="So we can greet you properly. Optional."
+            autoCapitalize="words"
+            autoComplete="name"
+            textContentType="name"
+            editable={!busy}
+          />
+        ) : null}
+
         <TextField
           label="Email address"
           value={email}

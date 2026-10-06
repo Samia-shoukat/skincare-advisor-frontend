@@ -80,10 +80,7 @@ export function SeverityMeter({
 
   return (
     <View style={styles.meterRow}>
-      <View style={styles.meterHead}>
-        <Text style={styles.meterLabel}>{label}</Text>
-        {caption ? <Text style={styles.meterCaption}>{caption}</Text> : null}
-      </View>
+      <Text style={styles.meterLabel}>{label}</Text>
       <View style={styles.meterTrack} accessibilityLabel={`${label}: ${caption ?? severity}`}>
         {[1, 2, 3].map((segment) => (
           <View
@@ -92,6 +89,7 @@ export function SeverityMeter({
           />
         ))}
       </View>
+      {caption ? <Text style={styles.meterCaption}>{caption}</Text> : null}
     </View>
   );
 }
@@ -187,33 +185,34 @@ const styles = StyleSheet.create({
     borderColor: color.line,
   },
 
-  meterRow: { gap: space.xs, marginTop: space.md },
-  meterHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  meterLabel: { ...type.body, color: color.text },
-  meterCaption: { ...type.small, color: color.textMuted },
-  meterTrack: { flexDirection: 'row', gap: 4 },
+  // No top margin: the caller spaces multiple meters, so the first sits flush
+  // with the top of the card it is in.
+  meterRow: {},
+  meterLabel: { ...type.bodyStrong, fontSize: 14, lineHeight: 19, color: color.text },
+  meterCaption: { ...type.small, fontSize: 12, lineHeight: 16, color: color.textMuted },
+  meterTrack: { flexDirection: 'row', gap: 4, marginTop: 7, marginBottom: 3 },
   meterSegment: {
     flex: 1,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: color.surfaceRaised,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: color.line,
   },
   meterSegmentFilled: { backgroundColor: color.primary },
 
   actionTile: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
+    gap: 14,
     backgroundColor: color.primary,
     borderRadius: radius.card,
-    padding: space.lg,
+    padding: 18,
   },
   actionTilePressed: { backgroundColor: color.primaryPressed },
   actionTileDisabled: { backgroundColor: color.lineStrong },
-  actionIcon: { fontSize: 30 },
-  actionText: { flex: 1, gap: 2 },
-  actionTitle: { ...type.title, color: color.onPrimary },
-  actionSubtitle: { ...type.small, color: color.onPrimary, opacity: 0.85 },
+  actionIcon: { fontSize: 26 },
+  actionText: { flex: 1 },
+  actionTitle: { ...type.title, fontSize: 16, lineHeight: 21, color: color.onPrimary },
+  actionSubtitle: { ...type.small, fontSize: 13, lineHeight: 18, color: color.onPrimary, opacity: 0.85 },
 
   miniTile: {
     flex: 1,

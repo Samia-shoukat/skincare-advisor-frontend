@@ -24,8 +24,10 @@
 
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { color, radius, shadow, space, type } from '../lib/theme';
+import { Icon, IconName } from './Icon';
 
 /** The base translucent panel. `tone="strong"` for panels carrying body text. */
 export function GlassCard({
@@ -55,10 +57,14 @@ export function GlassCard({
 /** Circular glass button: back, menu, notifications, overflow. */
 export function IconButton({
   glyph,
+  icon,
   label,
   onPress,
 }: {
-  glyph: string;
+  /** An emoji or character. Ignored when `icon` is given. */
+  glyph?: string;
+  /** A line icon. Preferred over `glyph` on redesigned screens. */
+  icon?: IconName;
   /** Spoken label. The glyph is decorative, so this is the only description. */
   label: string;
   onPress?: () => void;
@@ -72,7 +78,57 @@ export function IconButton({
       hitSlop={10}
       style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
     >
-      <Text style={styles.iconGlyph}>{glyph}</Text>
+      {icon ? (
+        <Icon name={icon} size={18} tint={color.text} />
+      ) : (
+        <Text style={styles.iconGlyph}>{glyph}</Text>
+      )}
+    </Pressable>
+  );
+}
+
+/**
+ * Initials on the accent gradient, inside a white ring.
+ *
+ * No photo upload, deliberately: the backend keeps no images (FR-CAM-003's
+ * zero-save rule), and a profile picture would be the one face photograph the
+ * system held on to.
+ */
+export function Avatar({
+  initials,
+  size = 44,
+  onPress,
+  label,
+}: {
+  initials: string;
+  size?: number;
+  onPress?: () => void;
+  /** Spoken label when pressable. */
+  label?: string;
+}) {
+  const ring = Math.max(2, Math.round(size / 22));
+  const body = (
+    <View
+      style={[
+        styles.avatarRing,
+        { width: size, height: size, borderRadius: size / 2, padding: ring },
+        shadow.card,
+      ]}
+    >
+      <LinearGradient
+        colors={color.accentGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.avatarFill, { borderRadius: size / 2 }]}
+      >
+        <Text style={[styles.avatarText, { fontSize: size * 0.36 }]}>{initials}</Text>
+      </LinearGradient>
+    </View>
+  );
+  if (!onPress) return body;
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={8}>
+      {body}
     </Pressable>
   );
 }
@@ -207,13 +263,13 @@ export function CareOverview({
 
 /** A task row with a tappable completion circle. */
 export function CheckRow({
-  glyph,
+  icon,
   title,
   caption,
   done,
   onToggle,
 }: {
-  glyph: string;
+  icon: IconName;
   title: string;
   caption?: string;
   done: boolean;
@@ -227,8 +283,8 @@ export function CheckRow({
       accessibilityLabel={caption ? `${title}, ${caption}` : title}
       style={({ pressed }) => [styles.checkRow, shadow.card, pressed && styles.pressedCard]}
     >
-      <View style={styles.checkTile}>
-        <Text style={styles.checkGlyph}>{glyph}</Text>
+      <View style={[styles.checkTile, done && styles.checkTileDone]}>
+        <Icon name={icon} size={18} tint={done ? color.textFaint : color.primary} />
       </View>
 
       <View style={styles.checkText}>
@@ -243,23 +299,23 @@ export function CheckRow({
       </View>
 
       <View style={[styles.checkMark, done && styles.checkMarkDone]}>
-        {done ? <Text style={styles.checkMarkGlyph}>✓</Text> : null}
+        {done ? <Icon name="check" size={14} tint={color.onPrimary} /> : null}
       </View>
     </Pressable>
   );
 }
 
-/** Wide panel: words on the left, a large glyph on the right, an action below. */
+/** Wide panel: words on the left, an icon on the right, an action below. */
 export function GuideCard({
   title,
   body,
-  glyph,
+  icon,
   actionLabel,
   onAction,
 }: {
   title: string;
   body: string;
-  glyph: string;
+  icon: IconName;
   actionLabel?: string;
   onAction?: () => void;
 }) {
@@ -275,7 +331,9 @@ export function GuideCard({
             </Pressable>
           ) : null}
         </View>
-        <Text style={styles.guideGlyph}>{glyph}</Text>
+        <View style={styles.guideBadge}>
+          <Icon name={icon} size={22} tint={color.primary} />
+        </View>
       </View>
     </GlassCard>
   );
@@ -339,6 +397,10 @@ const styles = StyleSheet.create({
   },
   iconButtonPressed: { backgroundColor: color.primarySoft },
   iconGlyph: { fontSize: 15, color: color.text },
+
+  avatarRing: { backgroundColor: color.surface },
+  avatarFill: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: color.onPrimary, fontWeight: '600', letterSpacing: 0.5 },
 
   sectionHeader: {
     flexDirection: 'row',
@@ -409,15 +471,15 @@ const styles = StyleSheet.create({
   checkTile: {
     width: 40,
     height: 40,
-    borderRadius: 15,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.surface,
+    backgroundColor: color.primarySoft,
   },
-  checkGlyph: { fontSize: 18 },
+  checkTileDone: { backgroundColor: color.surfaceRaised },
   checkText: { flex: 1 },
   checkTitle: { ...type.bodyStrong, fontSize: 15, lineHeight: 20, color: color.text },
-  checkTitleDone: { color: color.textMuted },
+  checkTitleDone: { color: color.textFaint, textDecorationLine: 'line-through' },
   checkCaption: { ...type.small, fontSize: 12.5, lineHeight: 17, color: color.textMuted, marginTop: 1 },
   checkMark: {
     width: 25,
@@ -429,14 +491,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkMarkDone: { backgroundColor: color.primary, borderColor: color.primary },
-  checkMarkGlyph: { color: color.onPrimary, fontSize: 13, fontWeight: '700', lineHeight: 16 },
 
   guideRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   guideText: { flex: 1 },
   guideTitle: { ...type.bodyStrong, fontSize: 15, lineHeight: 20, color: color.text },
   guideBody: { ...type.small, fontSize: 12.5, lineHeight: 18, color: color.textMuted, marginTop: 4 },
   guideAction: { ...type.small, fontSize: 12.5, lineHeight: 17, color: color.primary, fontWeight: '600', marginTop: 7 },
-  guideGlyph: { fontSize: 42 },
+  guideBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: color.primarySoft,
+  },
 
   pillButton: {
     backgroundColor: color.primary,

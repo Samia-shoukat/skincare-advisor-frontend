@@ -22,6 +22,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Button, FormScreen, Heading } from '../components/ui';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { displayName } from '../lib/displayName';
 import { color, radius, space, type } from '../lib/theme';
 import { ConsentScreen } from './onboarding/ConsentScreen';
 import { DateOfBirthScreen } from './onboarding/DateOfBirthScreen';
@@ -83,7 +84,15 @@ export function OnboardingHomeScreen() {
     return <ConsentScreen token={token} onDone={refresh} />;
   }
 
-  return <ScanHomeScreen token={token} userId={session.user.id} onSignOut={signOut} />;
+  return (
+    <ScanHomeScreen
+      token={token}
+      userId={session.user.id}
+      name={displayName(session.user)}
+      email={session.user.email ?? null}
+      onSignOut={signOut}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

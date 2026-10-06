@@ -35,21 +35,21 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-  [
-    "react-native-vision-camera",
-    {
-      "cameraPermissionText": "Skinsight needs camera access to scan your skin",
-      "enableFrameProcessors": true
-    }
-  ],
-  [
-    "expo-build-properties",
-    {
-      "android": {
-        "minSdkVersion": 26
-      }
-    }
-  ]
-]
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Skinsight needs camera access to scan your skin",
+          "enableFrameProcessors": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ]
+    ]
   }
 }

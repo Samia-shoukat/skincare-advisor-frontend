@@ -24,13 +24,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconButton } from './glass';
+import { Icon, IconName } from './Icon';
 import { color, radius, shadow, space, type } from '../lib/theme';
 
 export type TabKey = 'home' | 'routine' | 'today' | 'account';
 
 export interface TabDefinition {
   key: TabKey;
-  icon: string;
+  icon: IconName;
   label: string;
 }
 
@@ -54,7 +55,7 @@ export function Header({
   if (!title && !onBack && !right && !left) return null;
 
   const leading = onBack ? (
-    <IconButton glyph="←" label="Go back" onPress={onBack} />
+    <IconButton icon="arrow-left" label="Go back" onPress={onBack} />
   ) : (
     left ?? <View style={styles.slot} />
   );
@@ -118,7 +119,15 @@ export function Screen({
   );
 
   return (
-    <LinearGradient colors={color.gradient} style={styles.fill}>
+    <LinearGradient
+      colors={color.gradient}
+      // The design's wash runs at 170deg -- essentially top to bottom with a
+      // slight lean to the right. LinearGradient defaults to exactly vertical,
+      // which loses the diagonal drift between the blush and lilac stops.
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0.18, y: 1 }}
+      style={styles.fill}
+    >
       <SafeAreaView style={styles.fill} edges={['top', 'bottom']}>
         <Header title={title} onBack={onBack} left={headerLeft} right={headerRight} />
         {body}
@@ -167,7 +176,11 @@ function TabBar({
             style={styles.tab}
           >
             <View style={[styles.tabIconWrap, selected && styles.tabIconWrapActive]}>
-              <Text style={styles.tabIcon}>{tab.icon}</Text>
+              <Icon
+                name={tab.icon}
+                size={19}
+                tint={selected ? color.primary : color.textFaint}
+              />
             </View>
             <Text style={[styles.tabLabel, selected && styles.tabLabelActive]} numberOfLines={1}>
               {tab.label}
@@ -265,12 +278,11 @@ const styles = StyleSheet.create({
   },
   tab: { flex: 1, alignItems: 'center' },
   tabIconWrap: {
-    paddingHorizontal: 14,
-    paddingVertical: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 5,
     borderRadius: radius.pill,
   },
   tabIconWrapActive: { backgroundColor: color.primarySoft },
-  tabIcon: { fontSize: 16 },
   tabLabel: { ...type.small, fontSize: 10.5, lineHeight: 14, color: color.textMuted, marginTop: 2 },
   tabLabelActive: { color: color.primary, fontWeight: '600' },
 

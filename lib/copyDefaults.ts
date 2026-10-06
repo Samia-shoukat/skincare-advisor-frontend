@@ -45,7 +45,7 @@ const CHROME = {
     filterUpcoming: 'Upcoming',
     filterDone: 'Completed',
     careOverview: 'Care overview',
-    myRoutine: 'My routine',
+    myRoutine: 'My Routine',
     seeAll: 'See all',
     logRoutine: 'Log routine',
     nothingToday: 'Nothing scheduled yet',
@@ -54,6 +54,13 @@ const CHROME = {
     treat: 'Treat',
     moisturise: 'Moisturise',
     protect: 'Protect',
+    detectedIssues: 'Detected skin issues',
+    morningRoutine: 'Morning routine',
+    eveningRoutine: 'Evening routine',
+    markDone: 'Mark done',
+    routineCtaSubtitle: 'Your morning & evening steps',
+    dailyNoteLabel: "Today's note",
+    stepsDoneToday: 'steps done today',
   },
   home: {
     greeting: 'Hello',
@@ -63,6 +70,18 @@ const CHROME = {
     routineTile: 'My routine',
     accountTile: 'Account',
     noRoutine: 'No routine yet',
+    // About keeping a routine, not about skin. None of these says what a
+    // product does or what will happen to anyone's skin -- a line that did
+    // would be a claim, and claims come from the server (IF-UI-001).
+    dailyNotes: [
+      'Small, steady steps. Your skin keeps its own time.',
+      'Be as gentle with your skin as you are with the people you love.',
+      'Consistency is a quiet kind of care.',
+      'A few unhurried minutes, just for you.',
+      'Today is a good day to go slowly.',
+      'Show up for the routine, not for perfection.',
+      'Care is something you repeat, not something you rush.',
+    ],
   },
   routineScreen: {
     heading: 'Your routine',
