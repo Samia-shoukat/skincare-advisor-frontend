@@ -27,6 +27,7 @@ import { color, radius, space, type } from '../lib/theme';
 import { ConsentScreen } from './onboarding/ConsentScreen';
 import { DateOfBirthScreen } from './onboarding/DateOfBirthScreen';
 import { SafetyQuestionsScreen } from './onboarding/SafetyQuestionsScreen';
+import { SensitivitiesScreen, sensitivitiesSkipped } from './onboarding/SensitivitiesScreen';
 import { SkinTypeScreen } from './onboarding/SkinTypeScreen';
 import { ScanHomeScreen } from './ScanHomeScreen';
 
@@ -37,6 +38,13 @@ export function OnboardingHomeScreen() {
   // would tie these screens to one of the two ways of getting one.
   const { session, onboarding, refresh, signOut } = useAuth();
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
+  // undefined while reading the "skipped" flag from storage.
+  const [skipped, setSkipped] = useState<boolean | undefined>(undefined);
+  const userId = session?.user.id;
+
+  useEffect(() => {
+    if (userId) sensitivitiesSkipped(userId).then(setSkipped);
+  }, [userId]);
 
   // IF-UI-001: the restriction message comes from the server. No claim or
   // restriction copy is written into a screen component.
@@ -82,6 +90,23 @@ export function OnboardingHomeScreen() {
 
   if (onboarding.needsConsent) {
     return <ConsentScreen token={token} onDone={refresh} />;
+  }
+
+  // Optional and never a gate: asked once after onboarding, skippable, and
+  // answerable later from Profile. Wait for the skipped flag rather than
+  // flashing the screen at someone who already skipped it.
+  if (onboarding.needsSensitivities) {
+    if (skipped === undefined) return null;
+    if (!skipped) {
+      return (
+        <SensitivitiesScreen
+          token={token}
+          userId={session.user.id}
+          onDone={refresh}
+          onSkip={() => setSkipped(true)}
+        />
+      );
+    }
   }
 
   return (

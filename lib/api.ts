@@ -113,6 +113,12 @@ export interface SessionResponse {
   needsConsent: boolean;
   /** FR-ONB-003. A flag with no explanation attached — by design. */
   scanAccessBlocked: boolean;
+  /**
+   * True until the sensitivity questions are answered. Optional, and NOT part
+   * of onboardingComplete -- the app may ask, or skip, without blocking a scan.
+   * Absent from servers older than this field.
+   */
+  needsSensitivities?: boolean;
 }
 
 export interface Profile {
@@ -123,6 +129,14 @@ export interface Profile {
   onboardingComplete: boolean;
   scansRemaining: number;
   consentVersion: string | null;
+  /** Null until answered. Used by the server to rank products, never to gate. */
+  sensitiveSkin?: boolean | null;
+  fragranceAllergy?: boolean | null;
+}
+
+export interface Sensitivities {
+  sensitiveSkin: boolean;
+  fragranceAllergy: boolean;
 }
 
 export interface SafetyQuestion {
@@ -298,6 +312,11 @@ export interface ProductOption {
   id: string;
   brand: string;
   name: string;
+  /**
+   * The brand's product photo (https). Null when the catalogue has none, and
+   * absent on routines saved before images existed -- show a placeholder.
+   */
+  imageUrl?: string | null;
 }
 
 export interface RoutineStep {
@@ -362,6 +381,14 @@ export const api = {
     request<SessionResponse>('/v1/auth/session', { method: 'POST', token }),
 
   getProfile: (token: string) => request<Profile>('/v1/me', { token }),
+
+  /** Sensitive skin and fragrance allergy. Both answers, every time. Changeable. */
+  setSensitivities: (token: string, answers: Sensitivities) =>
+    request<Sensitivities & { onboardingComplete: boolean }>('/v1/me/sensitivities', {
+      method: 'POST',
+      token,
+      body: answers,
+    }),
 
   deleteAccount: (token: string) =>
     request<void>('/v1/me', { method: 'DELETE', token }),

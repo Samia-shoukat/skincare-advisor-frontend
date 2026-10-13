@@ -34,8 +34,8 @@
  * components/premium.tsx. The analysis reports a level; it measures nothing.
  */
 
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { GlassCard, SectionHeader, StatusPill } from '../components/glass';
@@ -374,6 +374,7 @@ function ProductRow({
   const saved = favorites?.ids.has(product.id) ?? false;
   return (
     <View style={[styles.product, highlight && styles.productHighlight]}>
+      <ProductImage url={product.imageUrl} />
       <View style={styles.productText}>
         <Text style={[styles.tier, highlight && styles.tierHighlight]}>{tier.toUpperCase()}</Text>
         <Text style={styles.productName}>
@@ -394,6 +395,37 @@ function ProductRow({
       ) : null}
     </View>
   );
+}
+
+/**
+ * The product photo, or a placeholder. Network images fail offline and some
+ * products have none, so the placeholder is the normal case, not an error.
+ */
+function ProductImage({ url }: { url?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) {
+    return (
+      <View style={[styles.productImage, styles.productImagePlaceholder]}>
+        <Icon name="package" size={18} tint={color.textFaint} />
+      </View>
+    );
+  }
+  return (
+    <Image
+      source={{ uri: thumbnail(url) }}
+      style={styles.productImage}
+      onError={() => setFailed(true)}
+      accessibilityIgnoresInvertColors
+      // Decorative: the brand and name beside it are what a screen reader reads.
+      accessible={false}
+    />
+  );
+}
+
+/** Shopify serves any width on request; a 56px slot needs ~3x that, not 2000px. */
+function thumbnail(url: string): string {
+  if (!url.includes('cdn.shopify.com')) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}width=180`;
 }
 
 const styles = StyleSheet.create({
@@ -499,6 +531,8 @@ const styles = StyleSheet.create({
   },
   productHighlight: { backgroundColor: color.primarySoft },
   productText: { flex: 1 },
+  productImage: { width: 56, height: 56, borderRadius: 12, backgroundColor: color.surface },
+  productImagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
   tier: { ...type.small, fontSize: 10.5, lineHeight: 14, letterSpacing: 0.8, fontWeight: '600', color: color.textFaint },
   tierHighlight: { color: color.primary },
   productName: { ...type.body, fontSize: 14, lineHeight: 19, color: color.text, marginTop: 2 },
